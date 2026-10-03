@@ -25,6 +25,9 @@
     restart: unless-stopped
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       DATABASE_URL: "postgresql://platform:platform_dev_password@postgres:5432/aiplatform"
 
