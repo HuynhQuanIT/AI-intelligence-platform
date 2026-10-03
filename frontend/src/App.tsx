@@ -156,6 +156,8 @@ export default function App() {
       return;
     }
 
+    const history = chat.slice(-10).map((m) => ({ role: m.role, text: m.text }));
+
     setQ('');
     setChat((current) => [
       ...current,
@@ -174,6 +176,7 @@ export default function App() {
         body: JSON.stringify({
           message,
           use_rag: useRag,
+          history,
         }),
       });
 

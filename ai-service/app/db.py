@@ -9,3 +9,12 @@ def query(sql,params=(),fetch=True):
             cur.execute(sql,params)
             if fetch: return cur.fetchall()
             conn.commit()
+
+from contextlib import contextmanager
+
+@contextmanager
+def transaction():
+    """Mọi lệnh trong block chạy chung 1 transaction: lỗi thì rollback hết."""
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            yield cur

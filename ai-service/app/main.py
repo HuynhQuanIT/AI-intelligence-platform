@@ -3,6 +3,7 @@ import os
 import re
 import time
 import uuid
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -10,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from psycopg.types.json import Jsonb
 
-from .db import init_pool, query
+from .db import init_pool, query, transaction
 from .graph import graph
 from .rag import add_document, documents, get_document
 from google.genai.errors import ServerError
@@ -68,6 +69,16 @@ class Eval(BaseModel):
     answer: str
     expected: str = ""
 
+class HistoryItem(BaseModel):
+    role: str          # "user" hoặc "ai"
+    text: str = Field(max_length=12000)
+
+
+class Chat(BaseModel):
+    message: str = Field(min_length=1, max_length=12000)
+    use_rag: bool = True
+    model: str | None = None
+    history: list[HistoryItem] = Field(default_factory=list, max_length=20)
 
 # =========================================================
 # Health check
@@ -80,6 +91,41 @@ def health():
         "service": "ai-service",
     }
 
+def estimate_cost(provider: str, input_tokens: int, output_tokens: int) -> float:
+    if provider == "gemini":
+        input_rate = float(os.getenv("GEMINI_INPUT_USD_PER_1M_TOKENS", "0"))
+        output_rate = float(os.getenv("GEMINI_OUTPUT_USD_PER_1M_TOKENS", "0"))
+        return (input_tokens * input_rate + output_tokens * output_rate) / 1_000_000
+    # Công thức demo cho mock/OpenAI
+    return input_tokens * 0.00000015 + output_tokens * 0.0000006
+
+
+def save_request_log(request_id, provider, model, input_tokens,
+                     output_tokens, cost, latency_ms, status, trace):
+    with transaction() as cur:
+        cur.execute(
+            """
+            INSERT INTO usage_logs (request_id, provider, model, input_tokens,
+                                    output_tokens, cost_usd, latency_ms, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (request_id, provider, model, input_tokens,
+             output_tokens, cost, latency_ms, status),
+        )
+        for item in trace:
+            cur.execute(
+                "INSERT INTO traces (request_id, step, status, detail) "
+                "VALUES (%s, %s, %s, %s)",
+                (request_id, item["step"], item["status"], Jsonb(item["detail"])),
+            )
+
+
+async def safe_log(**kwargs):
+    """Ghi log ở thread riêng; lỗi ghi log không được làm hỏng response."""
+    try:
+        await asyncio.to_thread(save_request_log, **kwargs)
+    except Exception:
+        logger.exception("Failed to save request log")
 
 # =========================================================
 # Chat
@@ -89,9 +135,12 @@ def health():
 async def chat(b: Chat):
     start_time = time.perf_counter()
     request_id = str(uuid.uuid4())
+    provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
+
+    def elapsed_ms() -> int:
+        return int((time.perf_counter() - start_time) * 1000)
 
     try:
-        # Execute the LangGraph workflow.
         state = await graph.ainvoke(
             {
                 "message": b.message,
@@ -103,129 +152,56 @@ async def chat(b: Chat):
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "selected_model": "",
+                "history": [h.model_dump() for h in b.history[-10:]],
             }
         )
-
-        latency_ms = int(
-            (time.perf_counter() - start_time) * 1000
-        )
-
-        # Determine the configured LLM provider.
-        provider = os.getenv(
-            "LLM_PROVIDER",
-            "mock",
-        ).strip().lower()
-
-        # Calculate estimated request cost.
-        if provider == "gemini":
-            input_rate = float(
-                os.getenv(
-                    "GEMINI_INPUT_USD_PER_1M_TOKENS",
-                    "0",
-                )
-            )
-
-            output_rate = float(
-                os.getenv(
-                    "GEMINI_OUTPUT_USD_PER_1M_TOKENS",
-                    "0",
-                )
-            )
-
-            cost = (
-                state["input_tokens"] * input_rate
-                + state["output_tokens"] * output_rate
-            ) / 1_000_000
-
-        else:
-            # Legacy demo formula for mock/OpenAI.
-            cost = (
-                state["input_tokens"] * 0.00000015
-                + state["output_tokens"] * 0.0000006
-            )
-
-        # Save usage metrics.
-        query(
-            """
-            INSERT INTO usage_logs (
-                request_id,
-                provider,
-                model,
-                input_tokens,
-                output_tokens,
-                cost_usd,
-                latency_ms
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                request_id,
-                provider,
-                state["selected_model"],
-                state["input_tokens"],
-                state["output_tokens"],
-                cost,
-                latency_ms,
-            ),
-            False,
-        )
-
-        # Save execution traces.
-        for trace_item in state["trace"]:
-            query(
-                """
-                INSERT INTO traces (
-                    request_id,
-                    step,
-                    status,
-                    detail
-                )
-                VALUES (%s, %s, %s, %s)
-                """,
-                (
-                    request_id,
-                    trace_item["step"],
-                    trace_item["status"],
-                    Jsonb(trace_item["detail"]),
-                ),
-                False,
-            )
-
-        return {
-            "request_id": request_id,
-            "answer": state["answer"],
-            "model": state["selected_model"],
-            "input_tokens": state["input_tokens"],
-            "output_tokens": state["output_tokens"],
-            "cost_usd": round(cost, 6),
-            "latency_ms": latency_ms,
-            "sources": state["context"],
-            "trace": state["trace"],
-        }
-
     except ServerError as exc:
-        logger.exception(
-            "Gemini service error. Request ID: %s",
-            request_id,
+        logger.exception("Gemini service error. Request ID: %s", request_id)
+        await safe_log(
+            request_id=request_id, provider=provider, model=b.model or "",
+            input_tokens=0, output_tokens=0, cost=0,
+            latency_ms=elapsed_ms(), status="error", trace=[],
         )
-
         raise HTTPException(
             status_code=503,
             detail="Gemini is temporarily unavailable. Please try again later.",
             headers={"Retry-After": "10"},
         ) from exc
-
     except Exception:
-        logger.exception(
-            "AI chat request failed. Request ID: %s",
-            request_id,
+        logger.exception("AI chat request failed. Request ID: %s", request_id)
+        await safe_log(
+            request_id=request_id, provider=provider, model=b.model or "",
+            input_tokens=0, output_tokens=0, cost=0,
+            latency_ms=elapsed_ms(), status="error", trace=[],
         )
-
         raise HTTPException(
             status_code=500,
             detail="AI request failed. Check ai-service logs for details.",
         )
 
+    latency_ms = elapsed_ms()
+    cost = estimate_cost(provider, state["input_tokens"], state["output_tokens"])
+
+    await safe_log(
+        request_id=request_id, provider=provider,
+        model=state["selected_model"],
+        input_tokens=state["input_tokens"],
+        output_tokens=state["output_tokens"],
+        cost=cost, latency_ms=latency_ms, status="success",
+        trace=state["trace"],
+    )
+
+    return {
+        "request_id": request_id,
+        "answer": state["answer"],
+        "model": state["selected_model"],
+        "input_tokens": state["input_tokens"],
+        "output_tokens": state["output_tokens"],
+        "cost_usd": round(cost, 6),
+        "latency_ms": latency_ms,
+        "sources": state["context"],
+        "trace": state["trace"],
+    }
 
 # =========================================================
 # Documents

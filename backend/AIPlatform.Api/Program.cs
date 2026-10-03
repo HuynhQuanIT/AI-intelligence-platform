@@ -127,4 +127,16 @@ public sealed class ChatRequest
 
     [JsonPropertyName("model")]
     public string? Model { get; set; }
+
+    [JsonPropertyName("history")]
+    public List<HistoryItem> History { get; set; } = new();
+}
+
+public sealed class HistoryItem
+{
+    [JsonPropertyName("role")]
+    public string Role { get; set; } = "";
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = "";
 }

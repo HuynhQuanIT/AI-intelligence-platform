@@ -2,7 +2,7 @@ import re
 import uuid
 import unicodedata
 
-from .db import query
+from .db import query, transaction
 
 
 def normalize_text(text: str) -> str:
@@ -38,31 +38,22 @@ def add_document(title, content):
         for i in range(0, len(content), 750)
     ] or [content]
 
-    query(
-        "INSERT INTO documents(id,title,filename) VALUES(%s,%s,%s)",
-        (did, title, title),
-        False
-    )
-
-    for i, chunk in enumerate(chunks):
-        query(
-            """
-            INSERT INTO document_chunks(
-                document_id,
-                chunk_index,
-                content
-            )
-            VALUES(%s,%s,%s)
-            """,
-            (did, i, chunk),
-            False
+    with transaction() as cur:
+        cur.execute(
+            "INSERT INTO documents(id,title,filename) VALUES(%s,%s,%s)",
+            (did, title, title),
+        )
+        cur.executemany(
+            "INSERT INTO document_chunks(document_id,chunk_index,content) "
+            "VALUES(%s,%s,%s)",
+            [(did, i, chunk) for i, chunk in enumerate(chunks)],
         )
 
     return {
         "id": did,
         "title": title,
         "chunks": len(chunks),
-        "status": "processed"
+        "status": "processed",
     }
 
 
