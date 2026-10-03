@@ -107,6 +107,8 @@ export default function App() {
   // Knowledge Center states
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [selectedDoc, setSelectedDoc] = useState<any>(null);
+  const [loadingDoc, setLoadingDoc] = useState(false);
 
   // Security Center states
   const [scanText, setScanText] = useState(
@@ -219,6 +221,24 @@ export default function App() {
       await refresh();
     } catch (error: any) {
       setErr(error.message);
+    }
+  }
+
+  async function viewDoc(documentId: string) {
+    try {
+      setLoadingDoc(true);
+      setSelectedDoc(null);
+      setErr('');
+
+      const result = await api(
+        `/documents/${encodeURIComponent(documentId)}`
+      );
+
+      setSelectedDoc(result);
+    } catch (error: any) {
+      setErr('Cannot load document: ' + error.message);
+    } finally {
+      setLoadingDoc(false);
     }
   }
 
@@ -525,6 +545,7 @@ export default function App() {
                 </Panel>
               </div>
 
+              {/* Indexed document list */}
               <Panel title={`Indexed documents (${docs.length})`}>
                 {docs.length ? (
                   docs.map((doc) => (
@@ -540,6 +561,15 @@ export default function App() {
                       </div>
 
                       <em>{doc.status}</em>
+
+                      <button
+                        className="secondary"
+                        onClick={() => viewDoc(doc.id)}
+                        disabled={loadingDoc}
+                      >
+                        <FileText size={15} />
+                        Xem
+                      </button>
                     </div>
                   ))
                 ) : (
@@ -548,6 +578,65 @@ export default function App() {
                   </p>
                 )}
               </Panel>
+
+              {/* Document detail */}
+              {loadingDoc && (
+                <Panel title="Document details">
+                  <p className="muted">
+                    Đang tải nội dung tài liệu...
+                  </p>
+                </Panel>
+              )}
+
+              {selectedDoc && !loadingDoc && (
+                <Panel title={`Document: ${selectedDoc.title}`}>
+                  <div className="row">
+                    <div>
+                      <b>{selectedDoc.filename}</b>
+                      <small>
+                        Trạng thái: {selectedDoc.status}
+                        {' · '}
+                        Số chunks: {selectedDoc.chunks?.length ?? 0}
+                      </small>
+                    </div>
+
+                    <button
+                      className="secondary"
+                      onClick={() => setSelectedDoc(null)}
+                    >
+                      Đóng
+                    </button>
+                  </div>
+
+                  <div className="document-content">
+                    {selectedDoc.chunks?.length ? (
+                      selectedDoc.chunks.map((chunk: any) => (
+                        <section
+                          key={chunk.chunk_index}
+                          className="document-chunk"
+                        >
+                          <h4>Chunk {chunk.chunk_index}</h4>
+
+                          <pre
+                            style={{
+                              whiteSpace: 'pre-wrap',
+                              overflowWrap: 'anywhere',
+                              fontFamily: 'inherit',
+                              lineHeight: 1.6,
+                            }}
+                          >
+                            {chunk.content}
+                          </pre>
+                        </section>
+                      ))
+                    ) : (
+                      <p className="muted">
+                        Tài liệu chưa có nội dung chunks để hiển thị.
+                      </p>
+                    )}
+                  </div>
+                </Panel>
+              )}
             </>
           )}
 

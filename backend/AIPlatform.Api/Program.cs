@@ -60,6 +60,10 @@ app.MapPost("/api/platform/documents",
 app.MapGet("/api/platform/documents",
     async (IHttpClientFactory f) => await Get(f, "/documents"));
 
+app.MapGet("/api/platform/documents/{documentId}",
+    async (string documentId, IHttpClientFactory f) =>
+        await Get(f, $"/documents/{Uri.EscapeDataString(documentId)}"));
+
 app.MapGet("/api/platform/agents",
     async (IHttpClientFactory f) => await Get(f, "/agents"));
 

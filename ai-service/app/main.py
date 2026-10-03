@@ -12,7 +12,8 @@ from psycopg.types.json import Jsonb
 
 from .db import init_pool, query
 from .graph import graph
-from .rag import add_document, documents
+from .rag import add_document, documents, get_document
+from google.genai.errors import ServerError
 
 
 # =========================================================
@@ -202,8 +203,19 @@ async def chat(b: Chat):
             "trace": state["trace"],
         }
 
+    except ServerError as exc:
+        logger.exception(
+            "Gemini service error. Request ID: %s",
+            request_id,
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail="Gemini is temporarily unavailable. Please try again later.",
+            headers={"Retry-After": "10"},
+        ) from exc
+
     except Exception:
-        # Log the original exception and traceback for debugging.
         logger.exception(
             "AI chat request failed. Request ID: %s",
             request_id,
@@ -211,10 +223,7 @@ async def chat(b: Chat):
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "AI request failed. "
-                "Check ai-service logs for details."
-            ),
+            detail="AI request failed. Check ai-service logs for details.",
         )
 
 
@@ -234,6 +243,17 @@ def create_doc(b: Doc):
 def get_docs():
     return documents()
 
+@app.get("/documents/{document_id}")
+def get_doc_detail(document_id: str):
+    document = get_document(document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found"
+        )
+
+    return document
 
 # =========================================================
 # Agents

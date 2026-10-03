@@ -828,3 +828,151 @@ textarea {
     padding: 9px;
   }
 }
+
+/* ========================================
+   GLOBAL TYPOGRAPHY - IMPROVED READABILITY
+======================================== */
+
+body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Sidebar */
+.brand {
+  font-size: 16px;
+}
+
+.brand small {
+  font-size: 10px;
+}
+
+.workspace {
+  font-size: 12px;
+}
+
+.navgroup label {
+  font-size: 10px;
+}
+
+.nav {
+  font-size: 12px;
+}
+
+.status {
+  font-size: 11px;
+}
+
+/* Header and page heading */
+header {
+  font-size: 12px;
+}
+
+.env {
+  font-size: 10px;
+}
+
+.heading small {
+  font-size: 10px;
+}
+
+.heading p {
+  font-size: 12px;
+}
+
+/* Buttons */
+.secondary,
+.primary {
+  font-size: 12px;
+}
+
+/* Dashboard / stats */
+.stat > div {
+  font-size: 11px;
+}
+
+.stat small {
+  font-size: 10px;
+}
+
+.panel h3 {
+  font-size: 14px;
+}
+
+/* Rows and tables */
+.row b {
+  font-size: 12px;
+}
+
+.row small {
+  font-size: 10px;
+}
+
+.row em,
+em {
+  font-size: 10px;
+}
+
+.rowbtn {
+  font-size: 12px;
+}
+
+table {
+  font-size: 11px;
+}
+
+/* Agent workflow */
+.node {
+  font-size: 12px;
+}
+
+.node small {
+  font-size: 10px;
+}
+
+.note {
+  font-size: 11px;
+}
+
+/* Forms */
+label {
+  font-size: 11px;
+}
+
+input,
+textarea,
+select {
+  font: 12px 'DM Sans', sans-serif;
+}
+
+.kv {
+  font-size: 11px;
+}
+
+/* AI Playground */
+.welcome p {
+  font-size: 12px;
+}
+
+.welcome button {
+  font-size: 11px;
+}
+
+.bubble {
+  font-size: 12px;
+}
+
+.bubble small {
+  font-size: 9px;
+}
+
+/* Status / notifications */
+.muted {
+  font-size: 11px;
+}
+
+.safe,
+.unsafe,
+.error {
+  font-size: 12px;
+}
