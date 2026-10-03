@@ -13,6 +13,7 @@ from psycopg.types.json import Jsonb
 
 from .db import init_pool, query, transaction
 from .graph import graph
+from .security import scan_text
 from .rag import add_document, documents, get_document
 from google.genai.errors import ServerError
 
@@ -127,6 +128,28 @@ async def safe_log(**kwargs):
     except Exception:
         logger.exception("Failed to save request log")
 
+def save_security_event(request_id, blocked, matches):
+    query(
+        """
+        INSERT INTO security_events (request_id, severity, event_type, description)
+        VALUES (%s, %s, %s, %s)
+        """,
+        (
+            request_id,
+            "high" if blocked else "medium",
+            "prompt_injection" if blocked else "context_injection",
+            ", ".join(matches),
+        ),
+        False,
+    )
+
+
+async def safe_security_event(request_id, blocked, matches):
+    try:
+        await asyncio.to_thread(save_security_event, request_id, blocked, matches)
+    except Exception:
+        logger.exception("Failed to save security event")
+
 # =========================================================
 # Chat
 # =========================================================
@@ -153,6 +176,10 @@ async def chat(b: Chat):
                 "output_tokens": 0,
                 "selected_model": "",
                 "history": [h.model_dump() for h in b.history[-10:]],
+                "route": "",
+                "enabled": [],
+                "blocked": False,
+                "security_matches": [],
             }
         )
     except ServerError as exc:
@@ -181,15 +208,21 @@ async def chat(b: Chat):
 
     latency_ms = elapsed_ms()
     cost = estimate_cost(provider, state["input_tokens"], state["output_tokens"])
+    status = "blocked" if state["blocked"] else "success"
 
     await safe_log(
         request_id=request_id, provider=provider,
         model=state["selected_model"],
         input_tokens=state["input_tokens"],
         output_tokens=state["output_tokens"],
-        cost=cost, latency_ms=latency_ms, status="success",
+        cost=cost, latency_ms=latency_ms, status=status,
         trace=state["trace"],
     )
+
+    if state["security_matches"]:
+        await safe_security_event(
+            request_id, state["blocked"], state["security_matches"]
+        )
 
     return {
         "request_id": request_id,
@@ -199,6 +232,7 @@ async def chat(b: Chat):
         "output_tokens": state["output_tokens"],
         "cost_usd": round(cost, 6),
         "latency_ms": latency_ms,
+        "blocked": state["blocked"],
         "sources": state["context"],
         "trace": state["trace"],
     }
@@ -354,22 +388,7 @@ def evaluate(b: Eval):
 
 @app.post("/security/scan")
 def scan(b: dict):
-    text = str(
-        b.get("text", "")
-    ).lower()
-
-    patterns = [
-        "ignore previous instructions",
-        "reveal system prompt",
-        "print api key",
-        "bypass security",
-    ]
-
-    matches = [
-        pattern
-        for pattern in patterns
-        if pattern in text
-    ]
+    matches = scan_text(str(b.get("text", "")))
 
     if matches:
         query(
