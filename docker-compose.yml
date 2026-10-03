@@ -28,6 +28,8 @@
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - uploads:/data/uploads
     environment:
       DATABASE_URL: "postgresql://platform:platform_dev_password@postgres:5432/aiplatform"
 
@@ -45,6 +47,14 @@
       GEMINI_OUTPUT_USD_PER_1M_TOKENS: "${GEMINI_OUTPUT_USD_PER_1M_TOKENS:-0}"
       GEMINI_EMBEDDING_MODEL: "${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}"
       EMBEDDING_DIM: "${EMBEDDING_DIM:-768}"
+
+      # local = lưu file vào volume "uploads"; s3 = dùng kho tương thích S3 (xem profile s3)
+      STORAGE_BACKEND: "${STORAGE_BACKEND:-local}"
+      UPLOAD_DIR: "/data/uploads"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "platform"
+      MINIO_SECRET_KEY: "minio_dev_password"
+      MINIO_BUCKET: "${MINIO_BUCKET:-documents}"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -75,7 +85,10 @@
     ports:
       - "6379:6379"
 
+  # Tùy chọn: chỉ chạy khi dùng --profile s3. MinIO đã bị gỡ khỏi Docker Hub và
+  # quay.io trả 401, nên mặc định không phụ thuộc vào image này.
   minio:
+    profiles: ["s3"]
     image: quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -91,4 +104,5 @@
 volumes:
   pgdata:
   miniodata:
+  uploads:
 

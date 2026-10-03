@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
+  Upload,
   Workflow,
   Zap,
 } from 'lucide-react';
@@ -109,6 +110,10 @@ export default function App() {
   const [content, setContent] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [loadingDoc, setLoadingDoc] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadNote, setUploadNote] = useState('');
 
   // Security Center states
   const [scanText, setScanText] = useState(
@@ -224,6 +229,54 @@ export default function App() {
       await refresh();
     } catch (error: any) {
       setErr(error.message);
+    }
+  }
+
+  async function uploadFile() {
+    if (!file) return;
+
+    try {
+      setUploading(true);
+      setErr('');
+      setUploadNote('');
+
+      // Không dùng api(): nó ép Content-Type JSON, còn multipart cần boundary do trình duyệt tự đặt.
+      const form = new FormData();
+      form.append('file', file);
+      if (title.trim()) form.append('title', title.trim());
+
+      const response = await fetch(API + '/documents/upload', {
+        method: 'POST',
+        body: form,
+      });
+
+      const body = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          typeof body?.detail === 'string'
+            ? body.detail
+            : `Upload thất bại (HTTP ${response.status})`
+        );
+      }
+
+      setUploadNote(
+        `Đã index "${body.title}": ${body.chunks} chunks` +
+          (body.embedded ? ', đã embedding.' : ', CHƯA có embedding (chạy reindex).') +
+          (body.security_matches?.length
+            ? ` Cảnh báo: nội dung có mẫu nghi prompt injection (${body.security_matches.join(', ')}); sẽ bị lọc khi truy xuất.`
+            : '')
+      );
+
+      setFile(null);
+      setFileInputKey((key) => key + 1);
+      setTitle('');
+
+      await refresh();
+    } catch (error: any) {
+      setErr(error.message);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -522,6 +575,28 @@ export default function App() {
                     <Plus size={16} />
                     Index document
                   </button>
+
+                  <label>Hoặc tải file lên (.pdf, .docx, .txt, .md - tối đa 10 MB)</label>
+
+                  <input
+                    key={fileInputKey}
+                    type="file"
+                    accept=".pdf,.docx,.txt,.md"
+                    onChange={(event) =>
+                      setFile(event.target.files?.[0] ?? null)
+                    }
+                  />
+
+                  <button
+                    className="primary"
+                    disabled={!file || uploading}
+                    onClick={uploadFile}
+                  >
+                    <Upload size={16} />
+                    {uploading ? 'Đang xử lý...' : 'Upload và index'}
+                  </button>
+
+                  {uploadNote && <p className="note">{uploadNote}</p>}
                 </Panel>
 
                 <Panel title="Retrieval configuration">
@@ -534,7 +609,7 @@ export default function App() {
                   </div>
 
                   <div className="kv">
-                    Retriever <b>Keyword baseline</b>
+                    Retriever <b>Hybrid (keyword + pgvector)</b>
                   </div>
 
                   <div className="kv">
@@ -542,8 +617,9 @@ export default function App() {
                   </div>
 
                   <p className="note">
-                    Semantic embeddings and pgvector similarity are planned
-                    upgrades; this runnable baseline uses lexical retrieval.
+                    Vector search chạy khi LLM_PROVIDER=gemini; nếu không sẽ
+                    tự quay về tìm theo từ khóa. File upload được lưu gốc
+                    trong MinIO, văn bản được chia chunk theo đoạn.
                   </p>
                 </Panel>
               </div>

@@ -13,3 +13,8 @@ CREATE TABLE IF NOT EXISTS traces(id BIGSERIAL PRIMARY KEY,request_id TEXT,step 
 CREATE TABLE IF NOT EXISTS security_events(id BIGSERIAL PRIMARY KEY,request_id TEXT,severity TEXT,event_type TEXT,description TEXT,created_at TIMESTAMPTZ DEFAULT NOW());
 ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding vector(768);
 CREATE INDEX IF NOT EXISTS document_chunks_embedding_idx ON document_chunks USING hnsw (embedding vector_cosine_ops);
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS object_key TEXT;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_type TEXT;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS size_bytes BIGINT;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS documents_content_hash_idx ON documents(content_hash) WHERE content_hash IS NOT NULL;

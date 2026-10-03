@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -56,6 +57,48 @@ app.MapPost("/api/platform/chat",
 app.MapPost("/api/platform/documents",
     async (HttpRequest r, IHttpClientFactory f) =>
         await Post(r, f, "/documents"));
+
+app.MapPost("/api/platform/documents/upload",
+    async (HttpRequest r, IHttpClientFactory f) =>
+    {
+        const long maxBytes = 11 * 1024 * 1024; // 10 MB file + phần đệm multipart
+
+        if (!r.HasFormContentType || string.IsNullOrEmpty(r.ContentType))
+        {
+            return Results.Json(
+                new { detail = "Expected multipart/form-data." },
+                statusCode: StatusCodes.Status415UnsupportedMediaType);
+        }
+
+        if (r.ContentLength is > maxBytes)
+        {
+            return Results.Json(
+                new { detail = "File vượt quá 10 MB." },
+                statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
+
+        // Chuyển nguyên multipart sang ai-service, không parse ở gateway.
+        using var buffer = new MemoryStream();
+        await r.Body.CopyToAsync(buffer);
+        if (buffer.Length > maxBytes)
+        {
+            return Results.Json(
+                new { detail = "File vượt quá 10 MB." },
+                statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
+        buffer.Position = 0;
+
+        using var content = new StreamContent(buffer);
+        content.Headers.ContentType = MediaTypeHeaderValue.Parse(r.ContentType);
+
+        var response = await f.CreateClient("ai").PostAsync(
+            "/documents/upload", content);
+
+        return Results.Content(
+            await response.Content.ReadAsStringAsync(),
+            "application/json",
+            statusCode: (int)response.StatusCode);
+    });
 
 app.MapGet("/api/platform/documents",
     async (IHttpClientFactory f) => await Get(f, "/documents"));

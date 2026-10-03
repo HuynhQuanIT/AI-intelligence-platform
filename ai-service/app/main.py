@@ -6,7 +6,7 @@ import uuid
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from psycopg.types.json import Jsonb
@@ -15,7 +15,16 @@ from .db import init_pool, query, transaction
 from .graph import graph
 from .security import scan_text
 from . import embeddings
-from .rag import add_document, documents, get_document, reindex_missing
+from .extract import ALLOWED_EXTENSIONS, ExtractError, extension, extract_text
+from .rag import (
+    DocumentTooLarge,
+    DuplicateDocument,
+    add_document,
+    add_uploaded_document,
+    documents,
+    get_document,
+    reindex_missing,
+)
 from google.genai.errors import ServerError
 
 
@@ -242,6 +251,54 @@ def create_doc(b: Doc):
         title=b.title,
         content=b.content,
     )
+
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
+@app.post("/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    title: str | None = Form(default=None, max_length=250),
+):
+    filename = file.filename or ""
+    ext = extension(filename)
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail="Chỉ hỗ trợ: " + ", ".join(sorted(ALLOWED_EXTENSIONS)),
+        )
+
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File vượt quá 10 MB.")
+    if not data:
+        raise HTTPException(status_code=422, detail="File rỗng.")
+
+    try:
+        text = await asyncio.to_thread(extract_text, filename, data)
+        result = await asyncio.to_thread(
+            add_uploaded_document, filename, title, data, text
+        )
+    except ExtractError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except DocumentTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc))
+    except DuplicateDocument as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"File này đã được index (tài liệu '{exc.title}', id {exc.document_id}).",
+        )
+    except Exception:
+        logger.exception("Document upload failed: %s", filename)
+        raise HTTPException(
+            status_code=503,
+            detail="Không lưu được tài liệu (MinIO hoặc database lỗi). Xem log ai-service.",
+        )
+
+    # Không chặn việc lưu: lọc thật sự nằm ở Analysis Agent lúc truy xuất.
+    result["security_matches"] = scan_text(text)
+    return result
 
 
 @app.get("/documents")
