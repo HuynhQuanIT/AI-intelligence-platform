@@ -14,7 +14,8 @@ from psycopg.types.json import Jsonb
 from .db import init_pool, query, transaction
 from .graph import graph
 from .security import scan_text
-from .rag import add_document, documents, get_document
+from . import embeddings
+from .rag import add_document, documents, get_document, reindex_missing
 from google.genai.errors import ServerError
 
 
@@ -53,12 +54,6 @@ app.add_middleware(
 # =========================================================
 # Request models
 # =========================================================
-
-class Chat(BaseModel):
-    message: str = Field(min_length=1, max_length=12000)
-    use_rag: bool = True
-    model: str | None = None
-
 
 class Doc(BaseModel):
     title: str = Field(min_length=1, max_length=250)
@@ -265,6 +260,15 @@ def get_doc_detail(document_id: str):
 
     return document
 
+@app.post("/documents/reindex")
+def reindex_documents():
+    if not embeddings.enabled():
+        raise HTTPException(
+            status_code=400,
+            detail="Embeddings are disabled: need LLM_PROVIDER=gemini and GEMINI_API_KEY.",
+        )
+    return reindex_missing()
+    
 # =========================================================
 # Agents
 # =========================================================

@@ -43,6 +43,8 @@
 
       GEMINI_INPUT_USD_PER_1M_TOKENS: "${GEMINI_INPUT_USD_PER_1M_TOKENS:-0}"
       GEMINI_OUTPUT_USD_PER_1M_TOKENS: "${GEMINI_OUTPUT_USD_PER_1M_TOKENS:-0}"
+      GEMINI_EMBEDDING_MODEL: "${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}"
+      EMBEDDING_DIM: "${EMBEDDING_DIM:-768}"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
