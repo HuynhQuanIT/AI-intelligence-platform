@@ -27,12 +27,19 @@
       - "8000:8000"
     environment:
       DATABASE_URL: "postgresql://platform:platform_dev_password@postgres:5432/aiplatform"
+
       LLM_PROVIDER: "${LLM_PROVIDER:-mock}"
+
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o-mini}"
-    depends_on:
-      postgres:
-        condition: service_healthy
+
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-3.8-flash}"
+      GEMINI_TEMPERATURE: "${GEMINI_TEMPERATURE:-0.2}"
+      GEMINI_MAX_OUTPUT_TOKENS: "${GEMINI_MAX_OUTPUT_TOKENS:-2048}"
+
+      GEMINI_INPUT_USD_PER_1M_TOKENS: "${GEMINI_INPUT_USD_PER_1M_TOKENS:-0}"
+      GEMINI_OUTPUT_USD_PER_1M_TOKENS: "${GEMINI_OUTPUT_USD_PER_1M_TOKENS:-0}"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
