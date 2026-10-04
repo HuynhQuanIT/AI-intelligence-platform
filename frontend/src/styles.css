@@ -976,3 +976,10 @@ select {
 .error {
   font-size: 12px;
 }
+.markdown p { margin: 0 0 10px; }
+.markdown p:last-child { margin-bottom: 0; }
+.markdown ul, .markdown ol { margin: 0 0 10px; padding-left: 22px; }
+.markdown li { margin: 3px 0; }
+.markdown code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 4px; font-size: .92em; }
+.markdown pre { background: rgba(0,0,0,.35); padding: 10px 12px; border-radius: 8px; overflow-x: auto; margin: 0 0 10px; }
+.markdown pre code { background: none; padding: 0; }

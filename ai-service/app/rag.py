@@ -4,6 +4,7 @@ import os
 import re
 import unicodedata
 import uuid
+from functools import lru_cache
 
 from . import embeddings, storage
 from .chunking import split_text
@@ -358,18 +359,33 @@ SEMANTIC_WEIGHT = float(os.getenv("RRF_SEMANTIC_WEIGHT", "1.0"))
 LEXICAL_WEIGHT = float(os.getenv("RRF_LEXICAL_WEIGHT", "0.5"))
 # Chỉ giữ kết quả vector có độ giống cách kết quả tốt nhất không quá ngần này.
 # Dùng ngưỡng tương đối vì độ giống tuyệt đối thay đổi theo model và ngôn ngữ.
-SEMANTIC_MARGIN = float(os.getenv("SEMANTIC_MARGIN", "0.10"))
-# Ngưỡng tuyệt đối: đo thực tế với gemini-embedding-001 (768 chiều) cho thấy chunk liên quan
-# đạt ~0.67-0.74 còn chunk không liên quan ~0.50-0.54. Dưới ngưỡng thì không đưa vào ngữ cảnh.
+SEMANTIC_MARGIN = float(os.getenv("SEMANTIC_MARGIN", "0.12"))
+# Đo thực tế với gemini-embedding-001 (768 chiều) trên 12 câu hỏi:
+#   chunk giống nhất của câu LIÊN QUAN:      0.70 - 0.85 (thấp nhất 0.702)
+#   chunk giống nhất của câu KHÔNG LIÊN QUAN: 0.52 - 0.64 (cao nhất 0.638)
+# Câu tiếng Việt cho nhiễu cao hơn tiếng Anh. Chưa hiệu chỉnh cho corpus lớn hơn: đo lại khi dữ liệu đổi.
+# Cổng: nếu chunk giống nhất còn dưới ngưỡng này thì coi như không có tài liệu liên quan.
+MIN_TOP_SIMILARITY = float(os.getenv("MIN_TOP_SIMILARITY", "0.67"))
+# Sàn cho từng chunk phụ khi đã qua cổng.
 MIN_SIMILARITY = float(os.getenv("MIN_SIMILARITY", "0.60"))
 # Khi chạy hybrid, kết quả chỉ khớp từ khóa phải khớp ít nhất ngần này tỉ lệ từ khóa của câu hỏi.
 LEXICAL_MIN_SCORE = float(os.getenv("LEXICAL_MIN_SCORE", "0.5"))
+# Khi vector không tìm thấy gì đủ giống, từ khóa phải khớp (gần) toàn bộ mới được tin một mình.
+# Tránh câu ngoài chủ đề lọt vào chỉ vì trùng vài từ chung như "cong thuc", "bo".
+LEXICAL_ALONE_MIN_SCORE = float(os.getenv("LEXICAL_ALONE_MIN_SCORE", "1.0"))
+
+
+@lru_cache(maxsize=256)
+def _query_vector(question: str) -> str:
+    """Nhớ vector của câu hỏi đã hỏi: giảm lượt gọi API embedding (hạn mức) và độ trễ.
+    Lỗi không được lưu đệm nên lần sau vẫn thử lại."""
+    return embeddings.to_pgvector(
+        embeddings.embed_texts([question], "RETRIEVAL_QUERY")[0]
+    )
 
 
 def retrieve_vector(question, limit):
-    vec = embeddings.to_pgvector(
-        embeddings.embed_texts([question], "RETRIEVAL_QUERY")[0]
-    )
+    vec = _query_vector(question)
 
     rows = query(
         """
@@ -401,29 +417,42 @@ def retrieve_vector(question, limit):
 
 
 def near_top(semantic):
-    """Bỏ kết quả vector dưới ngưỡng tuyệt đối, rồi bỏ những kết quả kém xa kết quả tốt nhất
+    """Qua cổng chunk tốt nhất, bỏ chunk dưới sàn, rồi bỏ những chunk kém xa chunk tốt nhất
     (danh sách đã sắp giảm dần)."""
+    if not semantic or semantic[0]["similarity"] < MIN_TOP_SIMILARITY:
+        return []
     semantic = [item for item in semantic if item["similarity"] >= MIN_SIMILARITY]
-    if not semantic:
-        return semantic
     cutoff = semantic[0]["similarity"] - SEMANTIC_MARGIN
     return [item for item in semantic if item["similarity"] >= cutoff]
 
 
-def retrieve(question, limit=4):
-    """Hybrid: từ khóa + vector, gộp bằng Reciprocal Rank Fusion có trọng số."""
+def _describe_error(exc) -> str:
+    code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    return type(exc).__name__ + (f" {code}" if code else "")
+
+
+def retrieve_ex(question, limit=4):
+    """
+    Hybrid: từ khóa + vector, gộp bằng Reciprocal Rank Fusion có trọng số.
+    Trả (kết quả, info). info cho biết đã dùng cách nào và vì sao quay về từ khóa,
+    để trace không che giấu việc vector search bị lỗi.
+    """
     lexical = retrieve_lexical(question, limit * 3)
 
     if not embeddings.enabled():
-        return lexical[:limit]
+        return lexical[:limit], {"mode": "keyword", "reason": "embeddings disabled"}
 
     try:
         semantic = near_top(retrieve_vector(question, limit * 3))
-    except Exception:
+    except Exception as exc:
         logger.exception("Vector search failed; falling back to lexical retrieval")
-        return lexical[:limit]
+        return lexical[:limit], {
+            "mode": "keyword",
+            "reason": "vector search failed: " + _describe_error(exc),
+        }
 
-    lexical = [item for item in lexical if item["score"] >= LEXICAL_MIN_SCORE]
+    lexical_min = LEXICAL_MIN_SCORE if semantic else max(LEXICAL_MIN_SCORE, LEXICAL_ALONE_MIN_SCORE)
+    lexical = [item for item in lexical if item["score"] >= lexical_min]
 
     fused = {}
     for ranking, weight in (
@@ -451,7 +480,11 @@ def retrieve(question, limit=4):
     for entry in ranked:
         entry["score"] = round(entry["score"], 4)
 
-    return ranked
+    return ranked, {"mode": "hybrid", "reason": ""}
+
+
+def retrieve(question, limit=4):
+    return retrieve_ex(question, limit)[0]
 
 
 def reindex_missing(batch_size=20):

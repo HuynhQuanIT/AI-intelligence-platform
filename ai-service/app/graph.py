@@ -10,7 +10,7 @@ from langgraph.graph import END, StateGraph
 from . import tools
 from .db import query
 from .llm import generate, generate_with_tools, supports_tools
-from .rag import normalize_text, retrieve
+from .rag import normalize_text, retrieve_ex
 from .security import scan_text
 
 logger = logging.getLogger(__name__)
@@ -111,10 +111,13 @@ def build():
         if "knowledge" not in s["enabled"]:
             return {"context": [], "trace": s["trace"] + [step("knowledge", "skipped", "Knowledge Agent is disabled")]}
 
-        docs = await asyncio.to_thread(retrieve, s["message"])
+        docs, info = await asyncio.to_thread(retrieve_ex, s["message"])
+        how = info["mode"] + (": " + info["reason"] if info["reason"] else "")
+        # Quay về từ khóa vì LỖI (không phải vì cấu hình) thì đánh dấu để dễ thấy.
+        status = "degraded" if info["reason"].startswith("vector search failed") else "completed"
         return {
             "context": docs,
-            "trace": s["trace"] + [step("knowledge", "completed", f"{len(docs)} chunks retrieved")],
+            "trace": s["trace"] + [step("knowledge", status, f"{len(docs)} chunks retrieved ({how})")],
         }
 
     async def analysis(s):

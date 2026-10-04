@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Markdown from './Markdown';
 import {
   Activity,
   AlertTriangle,
@@ -833,7 +834,9 @@ export default function App() {
                         : 'AI ASSISTANT'}
                     </small>
 
-                    <p>{message.text}</p>
+                    {message.role === 'user'
+                      ? <p>{message.text}</p>
+                      : <Markdown text={message.text} />}
 
                     {message.meta && (
                       <small className="message-meta">
