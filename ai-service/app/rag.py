@@ -84,6 +84,10 @@ class DocumentTooLarge(ValueError):
     pass
 
 
+class NoOriginalFile(Exception):
+    """Tài liệu được dán trực tiếp, không có file gốc."""
+
+
 def _embed_chunks(title, chunks):
     """Tạo embedding TRƯỚC khi mở transaction để không giữ kết nối DB lúc chờ API.
     Lỗi embedding không làm mất tài liệu: lưu không vector, backfill sau."""
@@ -259,11 +263,49 @@ def documents():
             title,
             filename,
             status,
-            created_at
+            created_at,
+            size_bytes,
+            (object_key IS NOT NULL) AS has_file
         FROM documents
         ORDER BY created_at DESC
         """
     )
+
+def delete_document(document_id):
+    """Xóa dòng DB (chunk xóa theo cascade) rồi xóa file gốc. False nếu không tồn tại."""
+    with transaction() as cur:
+        cur.execute(
+            "DELETE FROM documents WHERE id = %s RETURNING object_key",
+            (document_id,),
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        return False
+
+    # Xóa DB trước: nếu xóa file lỗi thì chỉ còn file mồ côi vô hại,
+    # còn ngược lại sẽ để lại tài liệu trỏ tới file không tồn tại.
+    if row["object_key"]:
+        storage.remove_object(row["object_key"])
+    return True
+
+
+def get_document_file(document_id):
+    """Trả (filename, content_type, bytes) hoặc None nếu không có tài liệu."""
+    rows = query(
+        "SELECT filename, content_type, object_key FROM documents WHERE id = %s",
+        (document_id,),
+    )
+    if not rows:
+        return None
+
+    row = rows[0]
+    if not row["object_key"]:
+        raise NoOriginalFile()
+
+    data = storage.get_object(row["object_key"])
+    return row["filename"], row["content_type"] or "application/octet-stream", data
+
 
 def get_document(document_id):
     rows = query(
@@ -314,6 +356,11 @@ LEXICAL_WEIGHT = float(os.getenv("RRF_LEXICAL_WEIGHT", "0.5"))
 # Chỉ giữ kết quả vector có độ giống cách kết quả tốt nhất không quá ngần này.
 # Dùng ngưỡng tương đối vì độ giống tuyệt đối thay đổi theo model và ngôn ngữ.
 SEMANTIC_MARGIN = float(os.getenv("SEMANTIC_MARGIN", "0.10"))
+# Ngưỡng tuyệt đối: đo thực tế với gemini-embedding-001 (768 chiều) cho thấy chunk liên quan
+# đạt ~0.67-0.74 còn chunk không liên quan ~0.50-0.54. Dưới ngưỡng thì không đưa vào ngữ cảnh.
+MIN_SIMILARITY = float(os.getenv("MIN_SIMILARITY", "0.60"))
+# Khi chạy hybrid, kết quả chỉ khớp từ khóa phải khớp ít nhất ngần này tỉ lệ từ khóa của câu hỏi.
+LEXICAL_MIN_SCORE = float(os.getenv("LEXICAL_MIN_SCORE", "0.5"))
 
 
 def retrieve_vector(question, limit):
@@ -351,7 +398,9 @@ def retrieve_vector(question, limit):
 
 
 def near_top(semantic):
-    """Bỏ các kết quả vector kém xa kết quả tốt nhất (danh sách đã sắp giảm dần)."""
+    """Bỏ kết quả vector dưới ngưỡng tuyệt đối, rồi bỏ những kết quả kém xa kết quả tốt nhất
+    (danh sách đã sắp giảm dần)."""
+    semantic = [item for item in semantic if item["similarity"] >= MIN_SIMILARITY]
     if not semantic:
         return semantic
     cutoff = semantic[0]["similarity"] - SEMANTIC_MARGIN
@@ -370,6 +419,8 @@ def retrieve(question, limit=4):
     except Exception:
         logger.exception("Vector search failed; falling back to lexical retrieval")
         return lexical[:limit]
+
+    lexical = [item for item in lexical if item["score"] >= LEXICAL_MIN_SCORE]
 
     fused = {}
     for ranking, weight in (

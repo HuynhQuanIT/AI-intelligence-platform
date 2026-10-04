@@ -59,6 +59,22 @@ def put_object(key: str, data: bytes, content_type: str) -> None:
     os.replace(temp, path)  # ghi nguyên tử: không để lại file dở dang
 
 
+def get_object(key: str) -> bytes:
+    """Đọc file gốc. Ném FileNotFoundError nếu không còn trong kho."""
+    if BACKEND == "s3":
+        response = _get_client().get_object(BUCKET, key)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
+
+    path = _local_path(key)
+    if not path.is_file():
+        raise FileNotFoundError(key)
+    return path.read_bytes()
+
+
 def remove_object(key: str) -> None:
     try:
         if BACKEND == "s3":

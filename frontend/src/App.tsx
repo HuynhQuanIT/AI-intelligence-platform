@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import {
   Activity,
@@ -9,6 +8,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Database,
+  Download,
   FileText,
   Gauge,
   LayoutDashboard,
@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
+  Trash2,
   Upload,
   Workflow,
   Zap,
@@ -277,6 +278,29 @@ export default function App() {
       setErr(error.message);
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function deleteDoc(doc: any) {
+    if (
+      !window.confirm(
+        `Xóa tài liệu "${doc.title}"? Nội dung, vector và file gốc sẽ bị xóa vĩnh viễn.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setErr('');
+      await api(`/documents/${encodeURIComponent(doc.id)}`, {
+        method: 'DELETE',
+      });
+
+      if (selectedDoc?.id === doc.id) setSelectedDoc(null);
+
+      await refresh();
+    } catch (error: any) {
+      setErr('Không xóa được tài liệu: ' + error.message);
     }
   }
 
@@ -619,7 +643,7 @@ export default function App() {
                   <p className="note">
                     Vector search chạy khi LLM_PROVIDER=gemini; nếu không sẽ
                     tự quay về tìm theo từ khóa. File upload được lưu gốc
-                    trong MinIO, văn bản được chia chunk theo đoạn.
+                    trong volume Docker, văn bản được chia chunk theo đoạn.
                   </p>
                 </Panel>
               </div>
@@ -635,6 +659,9 @@ export default function App() {
                         <b>{doc.title}</b>
                         <small>
                           {doc.filename} ·{' '}
+                          {doc.size_bytes
+                            ? `${(doc.size_bytes / 1024).toFixed(1)} KB · `
+                            : ''}
                           {new Date(doc.created_at).toLocaleString()}
                         </small>
                       </div>
@@ -648,6 +675,26 @@ export default function App() {
                       >
                         <FileText size={15} />
                         Xem
+                      </button>
+
+                      {doc.has_file && (
+                        <a
+                          className="secondary"
+                          href={`${API}/documents/${encodeURIComponent(doc.id)}/file`}
+                          download
+                          style={{ textDecoration: 'none' }}
+                        >
+                          <Download size={15} />
+                          Tải
+                        </a>
+                      )}
+
+                      <button
+                        className="secondary"
+                        onClick={() => deleteDoc(doc)}
+                      >
+                        <Trash2 size={15} />
+                        Xóa
                       </button>
                     </div>
                   ))

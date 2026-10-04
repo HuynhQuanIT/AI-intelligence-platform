@@ -107,6 +107,49 @@ app.MapGet("/api/platform/documents/{documentId}",
     async (string documentId, IHttpClientFactory f) =>
         await Get(f, $"/documents/{Uri.EscapeDataString(documentId)}"));
 
+app.MapDelete("/api/platform/documents/{documentId}",
+    async (string documentId, IHttpClientFactory f) =>
+    {
+        var response = await f.CreateClient("ai").DeleteAsync(
+            $"/documents/{Uri.EscapeDataString(documentId)}");
+
+        return Results.Content(
+            await response.Content.ReadAsStringAsync(),
+            "application/json",
+            statusCode: (int)response.StatusCode);
+    });
+
+app.MapGet("/api/platform/documents/{documentId}/file",
+    async (string documentId, HttpContext ctx, IHttpClientFactory f) =>
+    {
+        var response = await f.CreateClient("ai").GetAsync(
+            $"/documents/{Uri.EscapeDataString(documentId)}/file");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return Results.Content(
+                await response.Content.ReadAsStringAsync(),
+                "application/json",
+                statusCode: (int)response.StatusCode);
+        }
+
+        var name = "document";
+        if (response.Headers.TryGetValues("X-Document-Filename", out var values))
+        {
+            name = Uri.UnescapeDataString(values.First());
+        }
+
+        var contentType = response.Content.Headers.ContentType?.ToString()
+            ?? "application/octet-stream";
+
+        ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
+
+        return Results.File(
+            await response.Content.ReadAsByteArrayAsync(),
+            contentType,
+            name);
+    });
+
 app.MapGet("/api/platform/agents",
     async (IHttpClientFactory f) => await Get(f, "/agents"));
 

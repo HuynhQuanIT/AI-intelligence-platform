@@ -42,7 +42,7 @@ Destructive reset: `docker compose down -v`.
 ## Known limitations / production work
 - Agents do not call tools yet; retries, tool permissions, and human approval are not implemented.
 - Embeddings need `LLM_PROVIDER=gemini`; document text is sent to Google's API to create vectors.
-- Scanned (image-only) PDFs are rejected: there is no OCR. Documents cannot be deleted or downloaded from the UI yet.
+- Scanned (image-only) PDFs are rejected: there is no OCR.
 - Redis is provisioned but not yet used for caching.
 - MinIO is optional (`--profile s3`, `STORAGE_BACKEND=s3`): its images were removed from Docker Hub and the quay.io tags are no longer reliably pullable, so uploads default to a local volume.
 - Prompt-injection scanning is a small pattern list, not a security guarantee.

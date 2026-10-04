@@ -6,7 +6,9 @@ import uuid
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from urllib.parse import quote
+
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from psycopg.types.json import Jsonb
@@ -19,10 +21,13 @@ from .extract import ALLOWED_EXTENSIONS, ExtractError, extension, extract_text
 from .rag import (
     DocumentTooLarge,
     DuplicateDocument,
+    NoOriginalFile,
     add_document,
     add_uploaded_document,
+    delete_document,
     documents,
     get_document,
+    get_document_file,
     reindex_missing,
 )
 from google.genai.errors import ServerError
@@ -305,9 +310,17 @@ async def upload_document(
 def get_docs():
     return documents()
 
+def valid_document_id(value: str) -> str:
+    """id không phải UUID thì coi như không tồn tại (tránh lỗi 500 từ cột uuid)."""
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+
 @app.get("/documents/{document_id}")
 def get_doc_detail(document_id: str):
-    document = get_document(document_id)
+    document = get_document(valid_document_id(document_id))
 
     if document is None:
         raise HTTPException(
@@ -316,6 +329,47 @@ def get_doc_detail(document_id: str):
         )
 
     return document
+
+@app.delete("/documents/{document_id}")
+def delete_doc(document_id: str):
+    document_id = valid_document_id(document_id)
+    if not delete_document(document_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"deleted": document_id}
+
+
+@app.get("/documents/{document_id}/file")
+def download_doc(document_id: str):
+    document_id = valid_document_id(document_id)
+    try:
+        found = get_document_file(document_id)
+    except NoOriginalFile:
+        raise HTTPException(
+            status_code=404,
+            detail="Tài liệu này được dán trực tiếp, không có file gốc.",
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404, detail="File gốc không còn trong kho lưu trữ."
+        )
+
+    if found is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    filename, content_type, data = found
+    encoded = quote(filename)
+    ascii_name = filename.encode("ascii", "ignore").decode() or "document"
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={
+            # File do người dùng tải lên là dữ liệu không tin cậy: luôn tải về, không mở trực tiếp.
+            "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded}",
+            "X-Content-Type-Options": "nosniff",
+            "X-Document-Filename": encoded,
+        },
+    )
+
 
 @app.post("/documents/reindex")
 def reindex_documents():
