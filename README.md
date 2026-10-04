@@ -33,14 +33,14 @@ Destructive reset: `docker compose down -v`.
 
 ## Included in this baseline
 - Dashboard, Agent Studio, Knowledge Center, AI Playground, model configuration, cost metrics, traces, and security scan UI
-- LangGraph agent pipeline with conditional routing: Supervisor classifies the request, Security Agent blocks prompt injection before the model is called, Analysis Agent filters suspicious retrieved context
+- LangGraph agent pipeline with conditional routing and tool calling: Supervisor classifies the request, Security Agent blocks prompt injection before the model is called, Analysis Agent filters suspicious retrieved context
 - Document ingestion from pasted text or uploaded PDF/DOCX/TXT/MD (original kept in a Docker volume; S3-compatible storage optional), paragraph-aware chunking
 - Hybrid retrieval: keyword + Gemini embeddings in pgvector, fused with weighted Reciprocal Rank Fusion (falls back to keyword search when embeddings are unavailable)
 - Chat/model adapter and request/token/cost/latency logging
 - Per-step traces and heuristic prompt-injection pattern detection
 
 ## Known limitations / production work
-- Agents do not call tools yet; retries, tool permissions, and human approval are not implemented.
+- The Tool Agent (Gemini function calling) can call four read-only tools (list/search/read documents, calculator), enabled per tool in the `agent_tools` table; tool output passes through the Security Agent. Retries, write actions, and human approval are not implemented.
 - Embeddings need `LLM_PROVIDER=gemini`; document text is sent to Google's API to create vectors.
 - Scanned (image-only) PDFs are rejected: there is no OCR.
 - Redis is provisioned but not yet used for caching.

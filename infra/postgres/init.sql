@@ -18,3 +18,6 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_type TEXT;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS size_bytes BIGINT;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS documents_content_hash_idx ON documents(content_hash) WHERE content_hash IS NOT NULL;
+INSERT INTO agents(id,name,description,role) VALUES ('tools','Tool Agent','Calls approved read-only tools: document search, document reader, calculator','executor') ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS agent_tools(name TEXT PRIMARY KEY,description TEXT NOT NULL DEFAULT '',enabled BOOLEAN NOT NULL DEFAULT TRUE);
+INSERT INTO agent_tools(name,description) VALUES ('list_documents','List indexed documents'),('search_documents','Search document chunks'),('read_document','Read chunks of one document'),('calculate','Evaluate an arithmetic expression') ON CONFLICT DO NOTHING;

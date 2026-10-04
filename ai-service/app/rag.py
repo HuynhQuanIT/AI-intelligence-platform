@@ -61,7 +61,10 @@ STOPWORDS = {
 def keywords(text: str) -> set[str]:
     """Từ khóa có nghĩa của câu hỏi; nếu toàn từ chức năng thì dùng lại tất cả."""
     all_words = words(text)
-    return (all_words - STOPWORDS) or all_words
+    # Số ngắn ("12", "34") khớp bừa vào mọi tài liệu có bảng số liệu nên không dùng làm từ khóa;
+    # số dài hơn (năm 2026, mã 404...) vẫn giữ.
+    meaningful = {w for w in all_words - STOPWORDS if not (w.isdigit() and len(w) < 3)}
+    return meaningful or (all_words - STOPWORDS) or all_words
 
 
 MAX_CHUNKS = 300  # ~270k ký tự; chặn tài liệu làm tốn quá nhiều lượt gọi embedding

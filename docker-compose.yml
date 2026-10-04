@@ -48,6 +48,14 @@
       GEMINI_EMBEDDING_MODEL: "${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}"
       EMBEDDING_DIM: "${EMBEDDING_DIM:-768}"
 
+      # Tinh chỉnh truy xuất và agent (xem .env.example)
+      MIN_SIMILARITY: "${MIN_SIMILARITY:-0.60}"
+      SEMANTIC_MARGIN: "${SEMANTIC_MARGIN:-0.10}"
+      LEXICAL_MIN_SCORE: "${LEXICAL_MIN_SCORE:-0.5}"
+      RRF_SEMANTIC_WEIGHT: "${RRF_SEMANTIC_WEIGHT:-1.0}"
+      RRF_LEXICAL_WEIGHT: "${RRF_LEXICAL_WEIGHT:-0.5}"
+      AGENT_MAX_TOOL_ROUNDS: "${AGENT_MAX_TOOL_ROUNDS:-4}"
+
       # local = lưu file vào volume "uploads"; s3 = dùng kho tương thích S3 (xem profile s3)
       STORAGE_BACKEND: "${STORAGE_BACKEND:-local}"
       UPLOAD_DIR: "/data/uploads"
@@ -105,4 +113,3 @@ volumes:
   pgdata:
   miniodata:
   uploads:
-
