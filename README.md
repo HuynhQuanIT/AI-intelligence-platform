@@ -40,6 +40,15 @@ Destructive reset: `docker compose down -v`.
 - Chat/model adapter and request/token/cost/latency logging
 - Per-step traces and heuristic prompt-injection pattern detection
 
+## Tests
+```bash
+cd ai-service
+pip install -r requirements-dev.txt
+pytest                      # unit tests; integration tests are skipped when PostgreSQL is unreachable
+DATABASE_URL=postgresql://platform:platform_dev_password@localhost:5432/aiplatform pytest   # with PostgreSQL (docker compose up -d postgres)
+```
+CI (`.github/workflows/ci.yml`) runs pytest against PostgreSQL + pgvector, type-checks and builds the frontend, builds the ASP.NET gateway and validates `docker-compose.yml`. The tests never call a real LLM (`LLM_PROVIDER=mock`, plus a fake Gemini client for streaming). Retrieval thresholds are locked with the real similarities measured on 04/10/2026; re-measure and update `tests/test_retrieval_thresholds.py` when the thresholds or embedding model change.
+
 ## Known limitations / production work
 - The Tool Agent (Gemini function calling) can call four read-only tools (list/search/read documents, calculator), enabled per tool in the `agent_tools` table; tool output passes through the Security Agent. Retries, write actions, and human approval are not implemented.
 - Embeddings need `LLM_PROVIDER=gemini`; document text is sent to Google's API to create vectors.
