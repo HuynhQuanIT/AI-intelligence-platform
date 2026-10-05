@@ -54,6 +54,74 @@ app.MapPost("/api/platform/chat",
     })
     .Accepts<ChatRequest>("application/json");
 
+app.MapPost("/api/platform/chat/stream",
+    async (ChatRequest body, HttpContext ctx, IHttpClientFactory f) =>
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/chat/stream")
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
+        };
+
+        // ResponseHeadersRead: nhận header ngay, rồi chuyển tiếp từng đoạn khi ai-service gửi.
+        using var response = await f.CreateClient("ai").SendAsync(
+            request, HttpCompletionOption.ResponseHeadersRead, ctx.RequestAborted);
+
+        ctx.Response.StatusCode = (int)response.StatusCode;
+        ctx.Response.ContentType = response.IsSuccessStatusCode
+            ? "text/event-stream"
+            : "application/json";
+        ctx.Response.Headers["Cache-Control"] = "no-cache";
+        ctx.Response.Headers["X-Accel-Buffering"] = "no";
+
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(ctx.RequestAborted);
+            var buffer = new byte[4096];
+            int read;
+            while ((read = await stream.ReadAsync(buffer.AsMemory(), ctx.RequestAborted)) > 0)
+            {
+                await ctx.Response.Body.WriteAsync(buffer.AsMemory(0, read), ctx.RequestAborted);
+                await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Trình duyệt đóng kết nối giữa chừng: không phải lỗi.
+        }
+    })
+    .Accepts<ChatRequest>("application/json");
+
+app.MapGet("/api/platform/conversations",
+    async (IHttpClientFactory f) => await Get(f, "/conversations"));
+
+app.MapPost("/api/platform/conversations",
+    async (IHttpClientFactory f) =>
+    {
+        var response = await f.CreateClient("ai").PostAsync("/conversations", null);
+
+        return Results.Content(
+            await response.Content.ReadAsStringAsync(),
+            "application/json",
+            statusCode: (int)response.StatusCode);
+    });
+
+app.MapGet("/api/platform/conversations/{conversationId}/messages",
+    async (string conversationId, IHttpClientFactory f) =>
+        await Get(f, $"/conversations/{Uri.EscapeDataString(conversationId)}/messages"));
+
+app.MapDelete("/api/platform/conversations/{conversationId}",
+    async (string conversationId, IHttpClientFactory f) =>
+    {
+        var response = await f.CreateClient("ai").DeleteAsync(
+            $"/conversations/{Uri.EscapeDataString(conversationId)}");
+
+        return Results.Content(
+            await response.Content.ReadAsStringAsync(),
+            "application/json",
+            statusCode: (int)response.StatusCode);
+    });
+
 app.MapPost("/api/platform/documents",
     async (HttpRequest r, IHttpClientFactory f) =>
         await Post(r, f, "/documents"));
@@ -216,6 +284,9 @@ public sealed class ChatRequest
 
     [JsonPropertyName("history")]
     public List<HistoryItem> History { get; set; } = new();
+
+    [JsonPropertyName("conversation_id")]
+    public string? ConversationId { get; set; }
 }
 
 public sealed class HistoryItem

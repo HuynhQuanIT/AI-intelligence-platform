@@ -36,6 +36,7 @@ Destructive reset: `docker compose down -v`.
 - LangGraph agent pipeline with conditional routing and tool calling: Supervisor classifies the request, Security Agent blocks prompt injection before the model is called, Analysis Agent filters suspicious retrieved context
 - Document ingestion from pasted text or uploaded PDF/DOCX/TXT/MD (original kept in a Docker volume; S3-compatible storage optional), paragraph-aware chunking
 - Hybrid retrieval: keyword + Gemini embeddings in pgvector, fused with weighted Reciprocal Rank Fusion (falls back to keyword search when embeddings are unavailable)
+- Conversations saved in PostgreSQL (list, reopen, delete) and answers streamed over Server-Sent Events
 - Chat/model adapter and request/token/cost/latency logging
 - Per-step traces and heuristic prompt-injection pattern detection
 
@@ -43,6 +44,7 @@ Destructive reset: `docker compose down -v`.
 - The Tool Agent (Gemini function calling) can call four read-only tools (list/search/read documents, calculator), enabled per tool in the `agent_tools` table; tool output passes through the Security Agent. Retries, write actions, and human approval are not implemented.
 - Embeddings need `LLM_PROVIDER=gemini`; document text is sent to Google's API to create vectors.
 - Scanned (image-only) PDFs are rejected: there is no OCR.
+- Streaming: Gemini text streams chunk by chunk; blocked replies and Tool Agent answers arrive in one piece. Conversations are shared (no login yet).
 - Redis is provisioned but not yet used for caching.
 - MinIO is optional (`--profile s3`, `STORAGE_BACKEND=s3`): its images were removed from Docker Hub and the quay.io tags are no longer reliably pullable, so uploads default to a local volume.
 - Prompt-injection scanning is a small pattern list, not a security guarantee.

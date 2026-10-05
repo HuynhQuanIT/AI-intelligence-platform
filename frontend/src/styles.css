@@ -983,3 +983,106 @@ select {
 .markdown code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 4px; font-size: .92em; }
 .markdown pre { background: rgba(0,0,0,.35); padding: 10px 12px; border-radius: 8px; overflow-x: auto; margin: 0 0 10px; }
 .markdown pre code { background: none; padding: 0; }
+
+/* Conversations */
+
+.chat-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.conv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: calc(100vh - 170px);
+  min-height: 600px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid #2b3b53;
+  border-radius: 11px;
+  background: #111d2e;
+}
+
+.conv-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+
+.conv-item {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.conv-item.active {
+  border-color: #2f6f68;
+  background: #14323a;
+}
+
+.conv-item:hover:not(.active) {
+  background: #172840;
+}
+
+.conv-open {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 0;
+  background: transparent;
+  color: #cbd7e6;
+  text-align: left;
+  cursor: pointer;
+}
+
+.conv-open span {
+  display: block;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conv-open small {
+  display: block;
+  margin-top: 2px;
+  color: #7a8ca5;
+  font-size: 9px;
+}
+
+.conv-delete {
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: #7a8ca5;
+  cursor: pointer;
+}
+
+.conv-delete:hover {
+  color: #ffb4ba;
+}
+
+.conv-open:disabled,
+.conv-delete:disabled,
+.conv-new:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .chat-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .conv-list {
+    height: auto;
+    min-height: 0;
+    max-height: 220px;
+  }
+}

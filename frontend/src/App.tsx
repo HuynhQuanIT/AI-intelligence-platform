@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Markdown from './Markdown';
 import {
   Activity,
@@ -38,15 +38,25 @@ type Page =
   | 'LLMOps Monitoring'
   | 'Security Center';
 
+type Conversation = {
+  id: string;
+  title: string;
+  updated_at: string;
+};
+
+type LiveStep = { step: string; status: string; detail: string };
+
 type ChatMessage = {
   role: 'user' | 'ai';
   text: string;
+  streaming?: boolean;
   meta?: {
     model?: string;
     latency_ms?: number;
     input_tokens?: number;
     output_tokens?: number;
     cost_usd?: number;
+    blocked?: boolean;
   };
 };
 
@@ -106,6 +116,10 @@ export default function App() {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [useRag, setUseRag] = useState(true);
   const [sending, setSending] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [liveStep, setLiveStep] = useState('');
+  const messagesRef = useRef<HTMLDivElement | null>(null);
 
   // Knowledge Center states
   const [title, setTitle] = useState('');
@@ -150,11 +164,74 @@ export default function App() {
 
   useEffect(() => {
     refresh();
+    loadConversations();
   }, []);
+
+  // Luôn cuộn xuống tin nhắn mới nhất khi có chữ hiện thêm.
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chat]);
 
   // ==============================
   // AI Playground
   // ==============================
+
+  async function loadConversations() {
+    try {
+      setConversations(await api('/conversations'));
+    } catch (error: any) {
+      setErr('Không tải được danh sách hội thoại: ' + error.message);
+    }
+  }
+
+  async function openConversation(id: string) {
+    if (sending || id === activeId) return;
+
+    try {
+      const rows = await api('/conversations/' + id + '/messages');
+      setChat(
+        rows.map((m: any) => ({ role: m.role, text: m.text, meta: m.meta }))
+      );
+      setActiveId(id);
+      setErr('');
+    } catch (error: any) {
+      setErr('Không mở được hội thoại: ' + error.message);
+    }
+  }
+
+  function newConversation() {
+    if (sending) return;
+    setActiveId(null);
+    setChat([]);
+    setErr('');
+  }
+
+  async function removeConversation(id: string) {
+    if (sending) return;
+    if (!window.confirm('Xóa hội thoại này? Không thể hoàn tác.')) return;
+
+    try {
+      await api('/conversations/' + id, { method: 'DELETE' });
+      if (id === activeId) {
+        setActiveId(null);
+        setChat([]);
+      }
+      await loadConversations();
+    } catch (error: any) {
+      setErr('Không xóa được hội thoại: ' + error.message);
+    }
+  }
+
+  // Cập nhật tin nhắn AI đang được viết (luôn là tin cuối).
+  function patchLast(update: (m: ChatMessage) => ChatMessage) {
+    setChat((current) => {
+      if (!current.length) return current;
+      const copy = current.slice();
+      copy[copy.length - 1] = update(copy[copy.length - 1]);
+      return copy;
+    });
+  }
 
   async function send() {
     const message = q.trim();
@@ -163,51 +240,100 @@ export default function App() {
       return;
     }
 
-    const history = chat.slice(-10).map((m) => ({ role: m.role, text: m.text }));
-
     setQ('');
-    setChat((current) => [
-      ...current,
-      {
-        role: 'user',
-        text: message,
-      },
-    ]);
-
     setErr('');
     setSending(true);
+    setLiveStep('');
 
     try {
-      const result = await api('/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          message,
-          use_rag: useRag,
-          history,
-        }),
-      });
+      // Tạo hội thoại ở tin nhắn đầu tiên; server đặt tên theo câu hỏi.
+      let conversationId = activeId;
+      if (!conversationId) {
+        const created = await api('/conversations', { method: 'POST' });
+        conversationId = created.id as string;
+        setActiveId(conversationId);
+      }
 
       setChat((current) => [
         ...current,
-        {
-          role: 'ai',
-          text: result.answer,
-          meta: result,
-        },
+        { role: 'user', text: message },
+        { role: 'ai', text: '', streaming: true },
       ]);
 
-      await refresh();
+      const response = await fetch(API + '/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          use_rag: useRag,
+          conversation_id: conversationId,
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(await response.text());
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finished = false;
+
+      const handle = (event: string, data: any) => {
+        if (event === 'step') {
+          setLiveStep((data as LiveStep).step);
+        } else if (event === 'reset') {
+          // Phần chữ vừa hiện chỉ là lời dẫn trước khi gọi công cụ.
+          patchLast((m) => ({ ...m, text: '' }));
+        } else if (event === 'delta') {
+          patchLast((m) => ({ ...m, text: m.text + data.delta }));
+        } else if (event === 'done') {
+          finished = true;
+          patchLast(() => ({ role: 'ai', text: data.answer, meta: data }));
+        } else if (event === 'error') {
+          throw new Error(data.detail || 'Stream error');
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Mỗi sự kiện SSE kết thúc bằng một dòng trống.
+        let cut: number;
+        while ((cut = buffer.indexOf('\n\n')) !== -1) {
+          const block = buffer.slice(0, cut);
+          buffer = buffer.slice(cut + 2);
+
+          let event = 'message';
+          const dataLines: string[] = [];
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event:')) event = line.slice(6).trim();
+            else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+          }
+          if (dataLines.length) handle(event, JSON.parse(dataLines.join('\n')));
+        }
+      }
+
+      if (!finished) {
+        throw new Error('Kết nối bị ngắt trước khi nhận đủ câu trả lời.');
+      }
+
+      await Promise.all([refresh(), loadConversations()]);
     } catch (error: any) {
+      // Bỏ bong bóng AI đang dở; tin nhắn người dùng vẫn được lưu trong hội thoại.
+      setChat((current) =>
+        current.length && current[current.length - 1].streaming
+          ? current.slice(0, -1)
+          : current
+      );
       setErr('Chat request failed: ' + error.message);
+      loadConversations();
     } finally {
       setSending(false);
-    }
-  }
-
-  function clearChat() {
-    if (!sending) {
-      setChat([]);
-      setErr('');
+      setLiveStep('');
     }
   }
 
@@ -772,6 +898,42 @@ export default function App() {
           {/* ============================== */}
 
           {page === 'AI Playground' && (
+            <div className="chat-layout">
+            <aside className="conv-list">
+              <button className="primary conv-new" onClick={newConversation} disabled={sending}>
+                <Plus size={14} /> Chat mới
+              </button>
+
+              {!conversations.length && (
+                <p className="muted">Chưa có hội thoại nào.</p>
+              )}
+
+              {conversations.map((c) => (
+                <div
+                  key={c.id}
+                  className={'conv-item' + (c.id === activeId ? ' active' : '')}
+                >
+                  <button
+                    className="conv-open"
+                    onClick={() => openConversation(c.id)}
+                    disabled={sending}
+                    title={c.title}
+                  >
+                    <span>{c.title}</span>
+                    <small>{new Date(c.updated_at).toLocaleString()}</small>
+                  </button>
+                  <button
+                    className="conv-delete"
+                    onClick={() => removeConversation(c.id)}
+                    disabled={sending}
+                    title="Xóa hội thoại"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </aside>
+
             <div className="chat">
               <div className="chathead">
                 <div>
@@ -789,17 +951,10 @@ export default function App() {
                     Enable RAG
                   </label>
 
-                  <button
-                    className="secondary"
-                    onClick={clearChat}
-                    disabled={sending}
-                  >
-                    Clear chat
-                  </button>
                 </div>
               </div>
 
-              <div className="messages">
+              <div className="messages" ref={messagesRef}>
                 {!chat.length && (
                   <div className="welcome">
                     <BrainCircuit size={36} />
@@ -834,13 +989,19 @@ export default function App() {
                         : 'AI ASSISTANT'}
                     </small>
 
-                    {message.role === 'user'
-                      ? <p>{message.text}</p>
-                      : <Markdown text={message.text} />}
+                    {message.role === 'user' ? (
+                      <p>{message.text}</p>
+                    ) : message.text ? (
+                      <Markdown text={message.text} />
+                    ) : (
+                      <p className="muted">
+                        Đang xử lý{liveStep ? ': ' + liveStep : ''}…
+                      </p>
+                    )}
 
-                    {message.meta && (
+                    {message.role === 'ai' && message.meta && message.meta.model !== undefined && (
                       <small className="message-meta">
-                        Model: {message.meta.model || 'unknown'}
+                        Model: {message.meta.model || (message.meta.blocked ? 'blocked by Security Agent' : 'unknown')}
                         {' · '}
                         Latency: {message.meta.latency_ms ?? 0} ms
                         {' · '}
@@ -855,12 +1016,6 @@ export default function App() {
                   </div>
                 ))}
 
-                {sending && (
-                  <div className="bubble ai">
-                    <small>AI ASSISTANT</small>
-                    <p>Thinking... Please wait.</p>
-                  </div>
-                )}
               </div>
 
               <div className="compose">
@@ -889,6 +1044,7 @@ export default function App() {
               <small className="muted center">
                 AI can make mistakes. Verify important information.
               </small>
+            </div>
             </div>
           )}
 

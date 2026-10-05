@@ -21,3 +21,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS documents_content_hash_idx ON documents(conten
 INSERT INTO agents(id,name,description,role) VALUES ('tools','Tool Agent','Calls approved read-only tools: document search, document reader, calculator','executor') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS agent_tools(name TEXT PRIMARY KEY,description TEXT NOT NULL DEFAULT '',enabled BOOLEAN NOT NULL DEFAULT TRUE);
 INSERT INTO agent_tools(name,description) VALUES ('list_documents','List indexed documents'),('search_documents','Search document chunks'),('read_document','Read chunks of one document'),('calculate','Evaluate an arithmetic expression') ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS conversations(id UUID PRIMARY KEY,title TEXT NOT NULL DEFAULT 'Cuộc trò chuyện mới',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS messages(id BIGSERIAL PRIMARY KEY,conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,role TEXT NOT NULL CHECK (role IN ('user','ai')),content TEXT NOT NULL,meta JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages(conversation_id, id);
+CREATE INDEX IF NOT EXISTS conversations_updated_idx ON conversations(updated_at DESC);

@@ -4,16 +4,19 @@ import re
 import time
 import uuid
 import asyncio
+import json
 from contextlib import asynccontextmanager
 
 from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from psycopg.types.json import Jsonb
 
 from .db import init_pool, query, transaction
+from . import conversations
 from .graph import graph
 from .security import scan_text
 from . import embeddings
@@ -48,6 +51,10 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Initialize database resources when the application starts."""
     init_pool()
+    try:
+        conversations.ensure_schema()
+    except Exception:
+        logger.exception("Could not create conversation tables")
     yield
 
 
@@ -89,6 +96,8 @@ class Chat(BaseModel):
     use_rag: bool = True
     model: str | None = None
     history: list[HistoryItem] = Field(default_factory=list, max_length=20)
+    # Có conversation_id thì server lưu tin nhắn và lấy lịch sử từ database (bỏ qua history do client gửi).
+    conversation_id: str | None = None
 
 # =========================================================
 # Health check
@@ -163,59 +172,59 @@ async def safe_security_event(request_id, blocked, matches):
 # Chat
 # =========================================================
 
-@app.post("/chat")
-async def chat(b: Chat):
-    start_time = time.perf_counter()
-    request_id = str(uuid.uuid4())
-    provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
+def initial_state(b: Chat, history: list, stream: bool = False) -> dict:
+    return {
+        "message": b.message,
+        "use_rag": b.use_rag,
+        "model": b.model,
+        "context": [],
+        "answer": "",
+        "trace": [],
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "selected_model": "",
+        "history": history,
+        "route": "",
+        "enabled": [],
+        "blocked": False,
+        "security_matches": [],
+        "stream": stream,
+    }
 
-    def elapsed_ms() -> int:
-        return int((time.perf_counter() - start_time) * 1000)
+
+async def prepare_conversation(b: Chat):
+    """Trả (conversation_id | None, history). Có conversation_id thì lấy lịch sử từ DB
+    rồi lưu ngay tin nhắn người dùng (không mất nếu model lỗi)."""
+    if not b.conversation_id:
+        return None, [h.model_dump() for h in b.history[-10:]]
 
     try:
-        state = await graph.ainvoke(
-            {
-                "message": b.message,
-                "use_rag": b.use_rag,
-                "model": b.model,
-                "context": [],
-                "answer": "",
-                "trace": [],
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "selected_model": "",
-                "history": [h.model_dump() for h in b.history[-10:]],
-                "route": "",
-                "enabled": [],
-                "blocked": False,
-                "security_matches": [],
-            }
-        )
-    except ServerError as exc:
-        logger.exception("Gemini service error. Request ID: %s", request_id)
-        await safe_log(
-            request_id=request_id, provider=provider, model=b.model or "",
-            input_tokens=0, output_tokens=0, cost=0,
-            latency_ms=elapsed_ms(), status="error", trace=[],
-        )
-        raise HTTPException(
-            status_code=503,
-            detail="Gemini is temporarily unavailable. Please try again later.",
-            headers={"Retry-After": "10"},
-        ) from exc
-    except Exception:
-        logger.exception("AI chat request failed. Request ID: %s", request_id)
-        await safe_log(
-            request_id=request_id, provider=provider, model=b.model or "",
-            input_tokens=0, output_tokens=0, cost=0,
-            latency_ms=elapsed_ms(), status="error", trace=[],
-        )
-        raise HTTPException(
-            status_code=500,
-            detail="AI request failed. Check ai-service logs for details.",
-        )
+        cid = conversations.parse_id(b.conversation_id)
+        if not await asyncio.to_thread(conversations.exists, cid):
+            raise conversations.ConversationNotFound(cid)
+    except conversations.ConversationNotFound:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
-    latency_ms = elapsed_ms()
+    history = await asyncio.to_thread(conversations.recent_history, cid)
+    await asyncio.to_thread(conversations.add_message, cid, "user", b.message)
+    return cid, history
+
+
+def source_summary(sources: list) -> list:
+    """Chỉ lưu thông tin nguồn (không lưu nội dung chunk) để bảng messages gọn."""
+    return [
+        {
+            "title": x.get("title"),
+            "document_id": x.get("document_id"),
+            "chunk_index": x.get("chunk_index"),
+            "similarity": x.get("similarity"),
+        }
+        for x in sources
+    ]
+
+
+async def finish_chat(request_id, provider, state, latency_ms, conversation_id):
+    """Dùng chung cho /chat và /chat/stream: ghi log, sự kiện bảo mật, lưu tin nhắn, dựng payload."""
     cost = estimate_cost(provider, state["input_tokens"], state["output_tokens"])
     status = "blocked" if state["blocked"] else "success"
 
@@ -233,8 +242,9 @@ async def chat(b: Chat):
             request_id, state["blocked"], state["security_matches"]
         )
 
-    return {
+    payload = {
         "request_id": request_id,
+        "conversation_id": conversation_id,
         "answer": state["answer"],
         "model": state["selected_model"],
         "input_tokens": state["input_tokens"],
@@ -245,6 +255,176 @@ async def chat(b: Chat):
         "sources": state["context"],
         "trace": state["trace"],
     }
+
+    if conversation_id:
+        meta = {
+            "model": payload["model"],
+            "input_tokens": payload["input_tokens"],
+            "output_tokens": payload["output_tokens"],
+            "cost_usd": payload["cost_usd"],
+            "latency_ms": latency_ms,
+            "blocked": payload["blocked"],
+            "sources": source_summary(state["context"]),
+            "trace": state["trace"],
+        }
+        try:
+            await asyncio.to_thread(
+                conversations.add_message, conversation_id, "ai", state["answer"], meta
+            )
+        except Exception:
+            logger.exception("Failed to save assistant message")
+
+    return payload
+
+
+async def log_failure(request_id, provider, model, latency_ms):
+    await safe_log(
+        request_id=request_id, provider=provider, model=model or "",
+        input_tokens=0, output_tokens=0, cost=0,
+        latency_ms=latency_ms, status="error", trace=[],
+    )
+
+
+@app.post("/chat")
+async def chat(b: Chat):
+    start_time = time.perf_counter()
+    request_id = str(uuid.uuid4())
+    provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
+
+    def elapsed_ms() -> int:
+        return int((time.perf_counter() - start_time) * 1000)
+
+    conversation_id, history = await prepare_conversation(b)
+
+    try:
+        state = await graph.ainvoke(initial_state(b, history))
+    except ServerError as exc:
+        logger.exception("Gemini service error. Request ID: %s", request_id)
+        await log_failure(request_id, provider, b.model, elapsed_ms())
+        raise HTTPException(
+            status_code=503,
+            detail="Gemini is temporarily unavailable. Please try again later.",
+            headers={"Retry-After": "10"},
+        ) from exc
+    except Exception:
+        logger.exception("AI chat request failed. Request ID: %s", request_id)
+        await log_failure(request_id, provider, b.model, elapsed_ms())
+        raise HTTPException(
+            status_code=500,
+            detail="AI request failed. Check ai-service logs for details.",
+        )
+
+    return await finish_chat(request_id, provider, state, elapsed_ms(), conversation_id)
+
+
+def sse(event: str, data) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+
+
+@app.post("/chat/stream")
+async def chat_stream(b: Chat):
+    """
+    Server-Sent Events. Các sự kiện:
+      start  {request_id, conversation_id}
+      step   {step, status, detail}      mỗi agent xong một bước
+      delta  {delta}                      một đoạn câu trả lời
+      done   {...như /chat}               kết quả cuối (answer đầy đủ, token, chi phí, nguồn, trace)
+      error  {detail}
+    """
+    start_time = time.perf_counter()
+    request_id = str(uuid.uuid4())
+    provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
+
+    # Lỗi 404 phải trả trước khi mở luồng để client nhận đúng mã HTTP.
+    conversation_id, history = await prepare_conversation(b)
+
+    def elapsed_ms() -> int:
+        return int((time.perf_counter() - start_time) * 1000)
+
+    async def events():
+        yield sse("start", {"request_id": request_id, "conversation_id": conversation_id})
+
+        state = initial_state(b, history, stream=True)
+        emitted = 0
+        streamed = False
+
+        try:
+            async for mode, chunk in graph.astream(state, stream_mode=["updates", "custom"]):
+                if mode == "custom":
+                    if chunk.get("reset"):
+                        # Lượt model vừa rồi chỉ là lời dẫn trước khi gọi công cụ: bên nhận xóa đi.
+                        yield sse("reset", {})
+                        streamed = False
+                    else:
+                        streamed = True
+                        yield sse("delta", chunk)
+                    continue
+
+                for update in chunk.values():
+                    if not update:
+                        continue
+                    state.update(update)
+                    for item in state["trace"][emitted:]:
+                        yield sse("step", item)
+                    emitted = len(state["trace"])
+
+            # Bị chặn hoặc agent có công cụ: câu trả lời có sẵn nguyên khối, gửi một lần.
+            if not streamed and state["answer"]:
+                yield sse("delta", {"delta": state["answer"]})
+
+            payload = await finish_chat(
+                request_id, provider, state, elapsed_ms(), conversation_id
+            )
+            yield sse("done", payload)
+
+        except ServerError:
+            logger.exception("Gemini service error. Request ID: %s", request_id)
+            await log_failure(request_id, provider, b.model, elapsed_ms())
+            yield sse("error", {"detail": "Gemini is temporarily unavailable. Please try again later."})
+        except Exception:
+            logger.exception("AI stream failed. Request ID: %s", request_id)
+            await log_failure(request_id, provider, b.model, elapsed_ms())
+            yield sse("error", {"detail": "AI request failed. Check ai-service logs for details."})
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# =========================================================
+# Conversations
+# =========================================================
+
+@app.post("/conversations")
+def create_conversation():
+    return conversations.create()
+
+
+@app.get("/conversations")
+def list_conversations():
+    return conversations.list_all()
+
+
+@app.get("/conversations/{conversation_id}/messages")
+def conversation_messages(conversation_id: str):
+    try:
+        return conversations.messages(conversations.parse_id(conversation_id))
+    except conversations.ConversationNotFound:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+
+@app.delete("/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str):
+    try:
+        cid = conversations.parse_id(conversation_id)
+    except conversations.ConversationNotFound:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if not conversations.delete(cid):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"deleted": cid}
+
 
 # =========================================================
 # Documents

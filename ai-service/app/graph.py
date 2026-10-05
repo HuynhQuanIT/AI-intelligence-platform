@@ -9,7 +9,9 @@ from langgraph.graph import END, StateGraph
 
 from . import tools
 from .db import query
-from .llm import generate, generate_with_tools, supports_tools
+from langgraph.config import get_stream_writer
+
+from .llm import generate, generate_stream, generate_with_tools, supports_tools
 from .rag import normalize_text, retrieve_ex
 from .security import scan_text
 
@@ -54,6 +56,7 @@ class State(TypedDict):
     enabled: list
     blocked: bool
     security_matches: list
+    stream: bool
 
 
 def step(name: str, status: str, detail: str) -> dict:
@@ -240,6 +243,9 @@ def build():
             events.append(step(label, "completed", f"{summary} -> {len(text)} chars, {ms} ms"))
             return result
 
+        async def emit(event):
+            get_stream_writer()(event)
+
         try:
             answer, inp, out, model, calls = await generate_with_tools(
                 build_prompt(s) + TOOL_HINT,
@@ -247,10 +253,13 @@ def build():
                 tools.specs(enabled_tools),
                 run_tool,
                 max_rounds=MAX_TOOL_ROUNDS,
+                on_event=emit if s.get("stream") else None,
             )
         except Exception:
             # Model không hỗ trợ function calling, hoặc lỗi tạm thời: trả lời không công cụ.
             logger.exception("Tool-enabled generation failed; answering without tools")
+            if s.get("stream"):
+                get_stream_writer()({"reset": True})  # bỏ phần chữ dở dang trước khi trả lời lại
             fallback = {
                 **s,
                 "trace": s["trace"] + events + [step("tools", "error", "Tool run failed; answered without tools")],
@@ -269,7 +278,19 @@ def build():
     async def response(s):
         prompt = build_prompt(s)
 
-        answer, inp, out, model = await generate(prompt, s["model"])
+        if s.get("stream"):
+            # Chế độ streaming: đẩy từng đoạn ra ngoài khi model sinh, đồng thời gom lại thành câu trả lời đầy đủ.
+            writer = get_stream_writer()
+            parts, inp, out, model = [], 0, 0, ""
+            async for event in generate_stream(prompt, s["model"]):
+                if "delta" in event:
+                    parts.append(event["delta"])
+                    writer({"delta": event["delta"]})
+                elif event.get("done"):
+                    inp, out, model = event["input_tokens"], event["output_tokens"], event["model"]
+            answer = "".join(parts).strip()
+        else:
+            answer, inp, out, model = await generate(prompt, s["model"])
 
         return {
             "answer": answer,
