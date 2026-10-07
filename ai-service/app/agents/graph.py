@@ -7,12 +7,13 @@ from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 
+from ..core.db import query
 from . import tools
-from .db import query
 from langgraph.config import get_stream_writer
 
-from .llm import generate, generate_stream, generate_with_tools, supports_tools
-from .rag import normalize_text, retrieve_ex
+from ..llm.client import generate, generate_stream, generate_with_tools, supports_tools
+from ..rag.retrieval import retrieve_ex
+from ..rag.text import normalize_text
 from .security import scan_text
 
 logger = logging.getLogger(__name__)

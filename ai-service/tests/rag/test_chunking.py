@@ -1,4 +1,4 @@
-from app.chunking import MAX_CHARS, OVERLAP, split_text
+from app.rag.chunking import MAX_CHARS, OVERLAP, split_text
 
 
 def test_empty_text_gives_no_chunks():

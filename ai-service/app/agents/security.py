@@ -1,4 +1,4 @@
-from .rag import normalize_text
+from ..rag.text import normalize_text
 
 # Viết ở dạng đã chuẩn hóa: chữ thường, không dấu, không dấu câu
 PATTERNS = [

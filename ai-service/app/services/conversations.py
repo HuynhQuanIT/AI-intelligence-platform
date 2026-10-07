@@ -7,7 +7,7 @@ import uuid
 
 from psycopg.types.json import Jsonb
 
-from .db import query, transaction
+from ..core.db import query, transaction
 
 DEFAULT_TITLE = "Cuộc trò chuyện mới"
 MAX_TITLE = 60

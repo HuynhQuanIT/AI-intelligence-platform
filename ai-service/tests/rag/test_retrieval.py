@@ -5,7 +5,7 @@ một ca bên dưới nghĩa là phải đo lại trước khi chấp nhận tha
 """
 import pytest
 
-from app import rag
+from app.rag import retrieval, text as rag_text
 
 
 def hits(*sims):
@@ -34,28 +34,28 @@ IRRELEVANT = [
 
 @pytest.mark.parametrize("question,sims", RELEVANT, ids=[q for q, _ in RELEVANT])
 def test_relevant_questions_keep_all_chunks(question, sims):
-    assert len(rag.near_top(hits(*sims))) == len(sims)
+    assert len(retrieval.near_top(hits(*sims))) == len(sims)
 
 
 @pytest.mark.parametrize("question,sims", IRRELEVANT, ids=[q for q, _ in IRRELEVANT])
 def test_irrelevant_questions_return_nothing(question, sims):
-    assert rag.near_top(hits(*sims)) == []
+    assert retrieval.near_top(hits(*sims)) == []
 
 
 def test_empty_input():
-    assert rag.near_top([]) == []
+    assert retrieval.near_top([]) == []
 
 
 def test_weak_secondary_chunks_are_dropped():
-    kept = rag.near_top(hits(0.85, 0.80, 0.62))
+    kept = retrieval.near_top(hits(0.85, 0.80, 0.62))
     assert [h["similarity"] for h in kept] == [0.85, 0.80]
 
 
 def test_keywords_ignore_stopwords_and_short_numbers():
-    assert "la" not in rag.keywords("RAG là gì?")
-    assert "12" not in rag.keywords("Tính 12 * 34 giúp tôi")
-    assert "rag" in rag.keywords("RAG là gì?")
+    assert "la" not in rag_text.keywords("RAG là gì?")
+    assert "12" not in rag_text.keywords("Tính 12 * 34 giúp tôi")
+    assert "rag" in rag_text.keywords("RAG là gì?")
 
 
 def test_normalize_text_removes_diacritics_and_punctuation():
-    assert rag.normalize_text("Bỏ qua, các HƯỚNG DẪN!") == "bo qua cac huong dan"
+    assert rag_text.normalize_text("Bỏ qua, các HƯỚNG DẪN!") == "bo qua cac huong dan"

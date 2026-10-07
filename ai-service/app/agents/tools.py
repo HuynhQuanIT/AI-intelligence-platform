@@ -7,8 +7,8 @@ import logging
 import operator
 import uuid
 
-from . import rag
-from .db import query
+from ..core.db import query
+from ..rag import documents as rag_documents, retrieval as rag_retrieval
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def _text(args, key, max_len):
 
 def list_documents(args):
     limit = _int(args, "limit", 10, 1, MAX_LIST)
-    all_rows = rag.documents()
+    all_rows = rag_documents.documents()
     rows = all_rows[:limit]
     return {
         "total": len(all_rows),
@@ -64,7 +64,7 @@ def list_documents(args):
 def search_documents(args):
     text = _text(args, "query", 300)
     limit = _int(args, "limit", 4, 1, MAX_SEARCH)
-    hits = rag.retrieve(text, limit)
+    hits = rag_retrieval.retrieve(text, limit)
     return {
         "count": len(hits),
         "results": [
@@ -90,7 +90,7 @@ def read_document(args):
     start = _int(args, "start_chunk", 0, 0, 100000)
     count = _int(args, "count", 3, 1, MAX_READ_CHUNKS)
 
-    document = rag.get_document(document_id)
+    document = rag_documents.get_document(document_id)
     if document is None:
         raise ToolError("Không có tài liệu với id này.")
 

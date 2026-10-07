@@ -3,7 +3,7 @@ import zipfile
 
 import pytest
 
-from app.extract import ExtractError, extension, extract_text
+from app.rag.extract import ExtractError, extension, extract_text
 
 
 def test_extension():
@@ -67,7 +67,7 @@ def test_docx_roundtrip():
 
 
 def test_docx_zip_bomb_is_rejected(monkeypatch):
-    from app import extract
+    from app.rag import extract
 
     monkeypatch.setattr(extract, "MAX_DOCX_UNZIPPED", 100)
     buffer = io.BytesIO()

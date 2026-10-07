@@ -1,6 +1,6 @@
 import pytest
 
-from app.security import PATTERNS, scan_text
+from app.agents.security import PATTERNS, scan_text
 
 
 @pytest.mark.parametrize("text", [
@@ -26,7 +26,7 @@ def test_benign_text_is_not_flagged(text):
 
 def test_patterns_are_normalized_form():
     # scan_text so khớp trên văn bản đã chuẩn hóa (thường, không dấu): mẫu phải ở đúng dạng đó.
-    from app.rag import normalize_text
+    from app.rag.text import normalize_text
 
     for pattern in PATTERNS:
         assert pattern == normalize_text(pattern), pattern

@@ -40,6 +40,38 @@ Destructive reset: `docker compose down -v`.
 - Chat/model adapter and request/token/cost/latency logging
 - Per-step traces and heuristic prompt-injection pattern detection
 
+## Project structure
+```
+ai-service/app/
+  main.py          # builds the FastAPI app and mounts the routers (entry point: app.main:app)
+  schemas.py       # Pydantic request models shared by api and services
+  api/             # HTTP layer only: routers (chat, conversations, documents, monitoring, security, health)
+  services/        # business logic used by routers: chat flow, telemetry (cost/logs), conversations
+  agents/          # LangGraph pipeline (graph.py), Tool Agent tools (tools.py), prompt-injection scan (security.py)
+  rag/             # text normalisation, chunking, extraction, embeddings, storage, documents, retrieval
+  llm/             # model adapters (mock / OpenAI-compatible / Gemini) and streaming
+  core/            # infrastructure shared by all layers (database pool)
+ai-service/tests/  # mirrors app/: tests/<package>/test_<module>.py
+backend/AIPlatform.Api/   # ASP.NET gateway (forwards /api/platform/* to ai-service)
+  Program.cs       # wiring only
+  Endpoints/       # one file per area: Chat, Conversation, Document, Monitoring, Security, Health
+  Services/        # AiProxy: relays requests/responses to ai-service
+  Models/          # request models
+  Extensions/      # service registration (HttpClient "ai", CORS)
+frontend/src/      # React + Vite
+  App.tsx          # shell: sidebar, header, error banner, page switch
+  pages/           # one component per page (Dashboard, KnowledgeCenter, Playground, ...)
+  components/      # reusable UI (Panel, Stat, TraceTable, Sidebar, Markdown)
+  hooks/           # usePlatformData (shared metrics/docs/traces), useChat (conversations + SSE)
+  api/             # client.ts (fetch wrapper), sse.ts (SSE reader)
+  config/          # navigation and page descriptions
+  types.ts         # shared types
+infra/postgres/    # SQL init
+```
+Dependency direction: `api -> services -> agents -> rag/llm -> core`. Lower layers never import upper ones.
+
+Test naming: `tests/<package>/test_<module>.py` tests one module (`tests/rag/test_chunking.py` -> `app/rag/chunking.py`). Tests of a whole endpoint are named after the router (`tests/api/test_chat.py`, `test_chat_stream.py`) and carry the `integration` marker when they need PostgreSQL.
+
 ## Tests
 ```bash
 cd ai-service
@@ -47,7 +79,7 @@ pip install -r requirements-dev.txt
 pytest                      # unit tests; integration tests are skipped when PostgreSQL is unreachable
 DATABASE_URL=postgresql://platform:platform_dev_password@localhost:5432/aiplatform pytest   # with PostgreSQL (docker compose up -d postgres)
 ```
-CI (`.github/workflows/ci.yml`) runs pytest against PostgreSQL + pgvector, type-checks and builds the frontend, builds the ASP.NET gateway and validates `docker-compose.yml`. The tests never call a real LLM (`LLM_PROVIDER=mock`, plus a fake Gemini client for streaming). Retrieval thresholds are locked with the real similarities measured on 04/10/2026; re-measure and update `tests/test_retrieval_thresholds.py` when the thresholds or embedding model change.
+CI (`.github/workflows/ci.yml`) runs pytest against PostgreSQL + pgvector, type-checks and builds the frontend, builds the ASP.NET gateway and validates `docker-compose.yml`. The tests never call a real LLM (`LLM_PROVIDER=mock`, plus a fake Gemini client for streaming). Retrieval thresholds are locked with the real similarities measured on 04/10/2026; re-measure and update `tests/rag/test_retrieval.py` when the thresholds or embedding model change.
 
 ## Known limitations / production work
 - The Tool Agent (Gemini function calling) can call four read-only tools (list/search/read documents, calculator), enabled per tool in the `agent_tools` table; tool output passes through the Security Agent. Retries, write actions, and human approval are not implemented.

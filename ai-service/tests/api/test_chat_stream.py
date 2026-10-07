@@ -2,7 +2,7 @@
 import pytest
 from google.genai import types
 
-from app import llm
+from app.llm import client as llm
 from conftest import parse_sse
 
 pytestmark = pytest.mark.integration

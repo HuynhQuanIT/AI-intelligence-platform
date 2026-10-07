@@ -1,7 +1,7 @@
 import pytest
 
-from app import tools
-from app.tools import ToolError
+from app.agents import tools
+from app.agents.tools import ToolError
 
 
 def calc(expression):
