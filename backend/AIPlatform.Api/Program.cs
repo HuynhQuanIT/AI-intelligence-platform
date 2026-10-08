@@ -19,6 +19,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapHealthEndpoints();
+app.MapAuthEndpoints();
 app.MapChatEndpoints();
 app.MapConversationEndpoints();
 app.MapDocumentEndpoints();

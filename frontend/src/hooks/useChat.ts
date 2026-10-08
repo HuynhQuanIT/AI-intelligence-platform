@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { API, api } from '../api/client';
+import { api, apiFetch, errorMessageOf } from '../api/client';
 import { readSse } from '../api/sse';
 import type { ChatMessage, Conversation, LiveStep } from '../types';
 
@@ -107,7 +107,7 @@ export function useChat({ refresh, setErr }: Options) {
         { role: 'ai', text: '', streaming: true },
       ]);
 
-      const response = await fetch(API + '/chat/stream', {
+      const response = await apiFetch('/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -118,7 +118,7 @@ export function useChat({ refresh, setErr }: Options) {
       });
 
       if (!response.ok || !response.body) {
-        throw new Error(await response.text());
+        throw new Error(await errorMessageOf(response));
       }
 
       let finished = false;

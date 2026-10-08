@@ -21,7 +21,7 @@ export default function Dashboard({ metrics, agents, traces, onNavigate }: Props
 
       <div className="cols">
         <Panel title="Platform modules">
-          {NAV_ITEMS.slice(1).map(({ name, icon: Icon }) => (
+          {NAV_ITEMS.filter((item) => item.name !== 'Dashboard' && item.roles.includes('admin')).map(({ name, icon: Icon }) => (
             <button className="rowbtn" onClick={() => onNavigate(name)} key={name}>
               <Icon size={17} />
               {name}

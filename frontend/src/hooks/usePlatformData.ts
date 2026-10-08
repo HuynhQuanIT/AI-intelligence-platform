@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import type { Agent, DocumentRow, Metrics, PlatformData, SecurityEvent, TraceRow } from '../types';
+import type { Agent, DocumentRow, Metrics, PlatformData, Role, SecurityEvent, TraceRow } from '../types';
 
 // Nạp số liệu dùng chung (metrics, agents, tài liệu, traces, sự kiện bảo mật).
-export function usePlatformData(): PlatformData & { err: string } {
+// Admin nạp đủ số liệu; user thường chỉ xem được danh sách tài liệu (server từ chối các phần còn lại).
+export function usePlatformData(role: Role): PlatformData & { err: string } {
   const [metrics, setMetrics] = useState<Metrics>({});
   const [agents, setAgents] = useState<Agent[]>([]);
   const [docs, setDocs] = useState<DocumentRow[]>([]);
@@ -13,6 +14,12 @@ export function usePlatformData(): PlatformData & { err: string } {
 
   async function refresh() {
     try {
+      if (role !== 'admin') {
+        setDocs(await api('/documents'));
+        setErr('');
+        return;
+      }
+
       const [m, a, d, t, e] = await Promise.all([
         api('/metrics'),
         api('/agents'),
@@ -34,7 +41,7 @@ export function usePlatformData(): PlatformData & { err: string } {
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [role]);
 
   return { metrics, agents, docs, traces, events, err, setErr, refresh };
 }

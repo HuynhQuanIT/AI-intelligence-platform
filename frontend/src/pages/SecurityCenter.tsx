@@ -7,7 +7,8 @@ import type { PlatformData } from '../types';
 const POSTURE = [
   ['Pattern injection scan', 'Active'],
   ['Event logging', 'Active'],
-  ['Authentication / RBAC', 'Not implemented'],
+  ['Authentication / RBAC', 'Active (JWT + roles)'],
+  ['Email OTP (register / reset)', 'Active'],
   ['Tenant isolation', 'Not implemented'],
   ['PII detection', 'Planned'],
 ];

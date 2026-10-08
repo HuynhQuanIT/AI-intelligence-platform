@@ -1,12 +1,13 @@
 """Giám sát: danh sách agent, số liệu sử dụng, trace và đánh giá nhanh."""
 import re
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from ..core.db import query
 from ..schemas import Eval
+from .deps import require_admin
 
-router = APIRouter(tags=["monitoring"])
+router = APIRouter(tags=["monitoring"], dependencies=[Depends(require_admin)])
 
 
 @router.get("/agents")

@@ -24,7 +24,8 @@
     build: ./ai-service
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      # Chỉ mở cho máy chủ (thử/gỡ lỗi). Người dùng đi qua gateway; ai-service vẫn bắt buộc đăng nhập.
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,6 +58,26 @@
       RRF_SEMANTIC_WEIGHT: "${RRF_SEMANTIC_WEIGHT:-1.0}"
       RRF_LEXICAL_WEIGHT: "${RRF_LEXICAL_WEIGHT:-0.5}"
       AGENT_MAX_TOOL_ROUNDS: "${AGENT_MAX_TOOL_ROUNDS:-4}"
+
+      # Đăng nhập và phân quyền (xem .env.example)
+      JWT_SECRET: "${JWT_SECRET:?Hãy đặt JWT_SECRET trong .env (chuỗi ngẫu nhiên >= 32 ký tự)}"
+      ACCESS_TOKEN_MINUTES: "${ACCESS_TOKEN_MINUTES:-60}"
+      OTP_PEPPER: "${OTP_PEPPER:-}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      REGISTRATION_MODE: "${REGISTRATION_MODE:-approval}"
+      ALLOWED_EMAIL_DOMAINS: "${ALLOWED_EMAIL_DOMAINS:-}"
+      CHAT_RATE_LIMIT_PER_MIN: "${CHAT_RATE_LIMIT_PER_MIN:-20}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:5173,http://localhost:5000}"
+
+      # Gửi email OTP: console (in vào log, chỉ để thử) | smtp
+      MAIL_BACKEND: "${MAIL_BACKEND:-console}"
+      MAIL_FROM: "${MAIL_FROM:-}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_SSL: "${SMTP_SSL:-false}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
 
       # local = lưu file vào volume "uploads"; s3 = dùng kho tương thích S3 (xem profile s3)
       STORAGE_BACKEND: "${STORAGE_BACKEND:-local}"

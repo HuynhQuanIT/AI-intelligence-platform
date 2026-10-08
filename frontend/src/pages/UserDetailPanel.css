@@ -1,0 +1,4 @@
+.subhead{margin:18px 0 6px;font:600 13px 'Space Grotesk'}
+.admin-pw-form{display:flex;flex-direction:column;gap:10px;max-width:420px}
+.admin-pw-actions{display:flex;gap:10px;flex-wrap:wrap}
+.auth-error{color:#ff8b8b;font-size:11px;margin:8px 0 0}

@@ -1,16 +1,17 @@
 """Security Center: quét văn bản và xem sự kiện bảo mật."""
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from ..agents.security import scan_text
 from ..core.db import query
+from .deps import require_admin
 
-router = APIRouter(tags=["security"])
+router = APIRouter(tags=["security"], dependencies=[Depends(require_admin)])
 
 
 @router.post("/security/scan")
-def scan(b: dict):
+def scan(b: dict, admin: dict = Depends(require_admin)):
     matches = scan_text(str(b.get("text", "")))
 
     if matches:
@@ -20,15 +21,17 @@ def scan(b: dict):
                 request_id,
                 severity,
                 event_type,
-                description
+                description,
+                user_id
             )
-            VALUES (%s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s)
             """,
             (
                 str(uuid.uuid4()),
                 "high",
                 "prompt_injection",
                 ", ".join(matches),
+                admin["id"],
             ),
             False,
         )

@@ -8,12 +8,16 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAiServiceClient(
         this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddHttpContextAccessor();
+        services.AddTransient<ForwardUserContextHandler>();
+
         services.AddHttpClient(AiProxy.ClientName, c =>
         {
             c.BaseAddress = new Uri(
                 configuration["AiService:BaseUrl"] ?? "http://localhost:8000");
             c.Timeout = TimeSpan.FromSeconds(90);
-        });
+        })
+        .AddHttpMessageHandler<ForwardUserContextHandler>();
 
         return services;
     }

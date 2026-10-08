@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Download, FileText, Plus, Trash2, Upload } from 'lucide-react';
-import { API, api } from '../api/client';
+import { api, apiFetch, downloadDocument } from '../api/client';
 import Panel from '../components/Panel';
 import type { DocumentDetail, DocumentRow, PlatformData } from '../types';
 
-type Props = Pick<PlatformData, 'docs' | 'refresh' | 'setErr'>;
+// canEdit: chỉ admin được thêm, tải lên và xóa tài liệu; user thường chỉ xem (server cũng kiểm tra).
+type Props = Pick<PlatformData, 'docs' | 'refresh' | 'setErr'> & { canEdit: boolean };
 
-export default function KnowledgeCenter({ docs, refresh, setErr }: Props) {
+export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Props) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<DocumentDetail | null>(null);
@@ -45,7 +46,7 @@ export default function KnowledgeCenter({ docs, refresh, setErr }: Props) {
       form.append('file', file);
       if (title.trim()) form.append('title', title.trim());
 
-      const response = await fetch(API + '/documents/upload', {
+      const response = await apiFetch('/documents/upload', {
         method: 'POST',
         body: form,
       });
@@ -109,8 +110,18 @@ export default function KnowledgeCenter({ docs, refresh, setErr }: Props) {
     }
   }
 
+  async function download(doc: DocumentRow) {
+    try {
+      setErr('');
+      await downloadDocument(doc.id, doc.filename);
+    } catch (error: any) {
+      setErr('Không tải được file: ' + error.message);
+    }
+  }
+
   return (
     <>
+      {canEdit ? (
       <div className="cols">
         <Panel title="Add knowledge">
           <label>Document title</label>
@@ -171,6 +182,9 @@ export default function KnowledgeCenter({ docs, refresh, setErr }: Props) {
           </p>
         </Panel>
       </div>
+      ) : (
+        <p className="note">Bạn chỉ có quyền xem tài liệu. Quản trị viên mới được thêm, tải lên hoặc xóa.</p>
+      )}
 
       {/* Indexed document list */}
       <Panel title={`Indexed documents (${docs.length})`}>
@@ -195,25 +209,22 @@ export default function KnowledgeCenter({ docs, refresh, setErr }: Props) {
               </button>
 
               {doc.has_file && (
-                <a
-                  className="secondary"
-                  href={`${API}/documents/${encodeURIComponent(doc.id)}/file`}
-                  download
-                  style={{ textDecoration: 'none' }}
-                >
+                <button className="secondary" onClick={() => download(doc)}>
                   <Download size={15} />
                   Tải
-                </a>
+                </button>
               )}
 
-              <button className="secondary" onClick={() => deleteDoc(doc)}>
-                <Trash2 size={15} />
-                Xóa
-              </button>
+              {canEdit && (
+                <button className="secondary" onClick={() => deleteDoc(doc)}>
+                  <Trash2 size={15} />
+                  Xóa
+                </button>
+              )}
             </div>
           ))
         ) : (
-          <p className="muted">No documents yet. Add one above.</p>
+          <p className="muted">{canEdit ? 'No documents yet. Add one above.' : 'Chưa có tài liệu nào.'}</p>
         )}
       </Panel>
 

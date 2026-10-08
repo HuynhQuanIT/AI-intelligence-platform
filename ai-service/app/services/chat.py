@@ -29,15 +29,15 @@ def initial_state(b: Chat, history: list, stream: bool = False) -> dict:
     }
 
 
-async def prepare_conversation(b: Chat):
+async def prepare_conversation(b: Chat, user_id: str):
     """Trả (conversation_id | None, history). Có conversation_id thì lấy lịch sử từ DB
     rồi lưu ngay tin nhắn người dùng (không mất nếu model lỗi).
-    Ném conversations.ConversationNotFound nếu cuộc trò chuyện không tồn tại."""
+    Ném conversations.ConversationNotFound nếu hội thoại không tồn tại hoặc không phải của user_id."""
     if not b.conversation_id:
         return None, [h.model_dump() for h in b.history[-10:]]
 
     cid = conversations.parse_id(b.conversation_id)
-    if not await asyncio.to_thread(conversations.exists, cid):
+    if not await asyncio.to_thread(conversations.exists, cid, user_id):
         raise conversations.ConversationNotFound(cid)
 
     history = await asyncio.to_thread(conversations.recent_history, cid)
@@ -58,7 +58,7 @@ def source_summary(sources: list) -> list:
     ]
 
 
-async def finish_chat(request_id, provider, state, latency_ms, conversation_id):
+async def finish_chat(request_id, provider, state, latency_ms, conversation_id, user_id=None):
     """Dùng chung cho /chat và /chat/stream: ghi log, sự kiện bảo mật, lưu tin nhắn, dựng payload."""
     cost = estimate_cost(provider, state["input_tokens"], state["output_tokens"])
     status = "blocked" if state["blocked"] else "success"
@@ -69,12 +69,12 @@ async def finish_chat(request_id, provider, state, latency_ms, conversation_id):
         input_tokens=state["input_tokens"],
         output_tokens=state["output_tokens"],
         cost=cost, latency_ms=latency_ms, status=status,
-        trace=state["trace"],
+        trace=state["trace"], user_id=user_id,
     )
 
     if state["security_matches"]:
         await safe_security_event(
-            request_id, state["blocked"], state["security_matches"]
+            request_id, state["blocked"], state["security_matches"], user_id
         )
 
     payload = {

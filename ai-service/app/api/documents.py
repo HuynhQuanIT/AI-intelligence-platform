@@ -4,7 +4,7 @@ import logging
 import uuid
 from urllib.parse import quote
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 
 from ..agents.security import scan_text
 from ..rag import embeddings
@@ -22,12 +22,15 @@ from ..rag.documents import (
 )
 from ..rag.extract import ALLOWED_EXTENSIONS, ExtractError, extension, extract_text
 from ..schemas import Doc
+from .deps import current_user, require_admin
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["documents"])
+# Mọi người đã đăng nhập được xem/tải tài liệu; thêm, xóa, reindex chỉ dành cho admin.
+router = APIRouter(tags=["documents"], dependencies=[Depends(current_user)])
+admin_only = [Depends(require_admin)]
 
 
-@router.post("/documents")
+@router.post("/documents", dependencies=admin_only)
 def create_doc(b: Doc):
     return add_document(
         title=b.title,
@@ -38,7 +41,7 @@ def create_doc(b: Doc):
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
-@router.post("/documents/upload")
+@router.post("/documents/upload", dependencies=admin_only)
 async def upload_document(
     file: UploadFile = File(...),
     title: str | None = Form(default=None, max_length=250),
@@ -107,7 +110,7 @@ def get_doc_detail(document_id: str):
 
     return document
 
-@router.delete("/documents/{document_id}")
+@router.delete("/documents/{document_id}", dependencies=admin_only)
 def delete_doc(document_id: str):
     document_id = valid_document_id(document_id)
     if not delete_document(document_id):
@@ -148,7 +151,7 @@ def download_doc(document_id: str):
     )
 
 
-@router.post("/documents/reindex")
+@router.post("/documents/reindex", dependencies=admin_only)
 def reindex_documents():
     if not embeddings.enabled():
         raise HTTPException(

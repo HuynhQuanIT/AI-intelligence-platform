@@ -5,29 +5,43 @@ import os
 import time
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from google.genai.errors import ServerError
 
 from ..agents.graph import graph
-from ..services import conversations
+from ..core import settings
+from ..services import conversations, ratelimit
 from ..services.chat import finish_chat, initial_state, prepare_conversation
 from ..services.telemetry import log_failure
 from ..schemas import Chat
+from .deps import current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 
 
-async def prepare(b: Chat):
+def check_rate_limit(user: dict) -> None:
+    """Giới hạn số tin nhắn mỗi phút của từng người (trong bộ nhớ)."""
+    wait = ratelimit.hit(f"chat:{user['id']}", settings.chat_rate_per_minute(), 60)
+    if wait:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Bạn gửi quá nhanh. Hãy thử lại sau {wait} giây.",
+            headers={"Retry-After": str(wait)},
+        )
+
+
+async def prepare(b: Chat, user: dict):
     try:
-        return await prepare_conversation(b)
+        return await prepare_conversation(b, user["id"])
     except conversations.ConversationNotFound:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
 
 @router.post("/chat")
-async def chat(b: Chat):
+async def chat(b: Chat, user: dict = Depends(current_user)):
+    check_rate_limit(user)
     start_time = time.perf_counter()
     request_id = str(uuid.uuid4())
     provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
@@ -35,13 +49,13 @@ async def chat(b: Chat):
     def elapsed_ms() -> int:
         return int((time.perf_counter() - start_time) * 1000)
 
-    conversation_id, history = await prepare(b)
+    conversation_id, history = await prepare(b, user)
 
     try:
         state = await graph.ainvoke(initial_state(b, history))
     except ServerError as exc:
         logger.exception("Gemini service error. Request ID: %s", request_id)
-        await log_failure(request_id, provider, b.model, elapsed_ms())
+        await log_failure(request_id, provider, b.model, elapsed_ms(), user["id"])
         raise HTTPException(
             status_code=503,
             detail="Gemini is temporarily unavailable. Please try again later.",
@@ -49,13 +63,13 @@ async def chat(b: Chat):
         ) from exc
     except Exception:
         logger.exception("AI chat request failed. Request ID: %s", request_id)
-        await log_failure(request_id, provider, b.model, elapsed_ms())
+        await log_failure(request_id, provider, b.model, elapsed_ms(), user["id"])
         raise HTTPException(
             status_code=500,
             detail="AI request failed. Check ai-service logs for details.",
         )
 
-    return await finish_chat(request_id, provider, state, elapsed_ms(), conversation_id)
+    return await finish_chat(request_id, provider, state, elapsed_ms(), conversation_id, user["id"])
 
 
 def sse(event: str, data) -> str:
@@ -63,7 +77,7 @@ def sse(event: str, data) -> str:
 
 
 @router.post("/chat/stream")
-async def chat_stream(b: Chat):
+async def chat_stream(b: Chat, user: dict = Depends(current_user)):
     """
     Server-Sent Events. Các sự kiện:
       start  {request_id, conversation_id}
@@ -72,12 +86,13 @@ async def chat_stream(b: Chat):
       done   {...như /chat}               kết quả cuối (answer đầy đủ, token, chi phí, nguồn, trace)
       error  {detail}
     """
+    check_rate_limit(user)
     start_time = time.perf_counter()
     request_id = str(uuid.uuid4())
     provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
 
     # Lỗi 404 phải trả trước khi mở luồng để client nhận đúng mã HTTP.
-    conversation_id, history = await prepare(b)
+    conversation_id, history = await prepare(b, user)
 
     def elapsed_ms() -> int:
         return int((time.perf_counter() - start_time) * 1000)
@@ -120,11 +135,11 @@ async def chat_stream(b: Chat):
 
         except ServerError:
             logger.exception("Gemini service error. Request ID: %s", request_id)
-            await log_failure(request_id, provider, b.model, elapsed_ms())
+            await log_failure(request_id, provider, b.model, elapsed_ms(), user["id"])
             yield sse("error", {"detail": "Gemini is temporarily unavailable. Please try again later."})
         except Exception:
             logger.exception("AI stream failed. Request ID: %s", request_id)
-            await log_failure(request_id, provider, b.model, elapsed_ms())
+            await log_failure(request_id, provider, b.model, elapsed_ms(), user["id"])
             yield sse("error", {"detail": "AI request failed. Check ai-service logs for details."})
 
     return StreamingResponse(

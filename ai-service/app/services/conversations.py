@@ -1,7 +1,8 @@
 """Lưu hội thoại và tin nhắn trong PostgreSQL.
 
-Hiện chưa có đăng nhập nên mọi hội thoại dùng chung. Khi thêm xác thực, thêm cột
-owner_id vào conversations và lọc theo cột đó ở mọi hàm bên dưới.
+Mỗi hội thoại thuộc về một người dùng (conversations.user_id, cột này do services/auth.py
+thêm lúc khởi động). Mọi hàm đọc/sửa/xóa đều lọc theo user_id: người khác truy cập sẽ nhận
+ConversationNotFound như thể hội thoại không tồn tại.
 """
 import uuid
 
@@ -55,32 +56,34 @@ def parse_id(value: str) -> str:
         raise ConversationNotFound(value)
 
 
-def create(title: str | None = None) -> dict:
+def create(user_id: str, title: str | None = None) -> dict:
     cid = str(uuid.uuid4())
     rows = query(
-        "INSERT INTO conversations(id, title) VALUES (%s, %s) "
+        "INSERT INTO conversations(id, title, user_id) VALUES (%s, %s, %s) "
         "RETURNING id::text AS id, title, created_at, updated_at",
-        (cid, (title or DEFAULT_TITLE)[:MAX_TITLE]),
+        (cid, (title or DEFAULT_TITLE)[:MAX_TITLE], user_id),
         True,
     )
     return _public(rows[0])
 
 
-def exists(conversation_id: str) -> bool:
-    return bool(query("SELECT 1 FROM conversations WHERE id = %s", (conversation_id,)))
+def exists(conversation_id: str, user_id: str) -> bool:
+    return bool(query(
+        "SELECT 1 FROM conversations WHERE id = %s AND user_id = %s", (conversation_id, user_id)
+    ))
 
 
-def list_all(limit: int = 100) -> list[dict]:
+def list_all(user_id: str, limit: int = 100) -> list[dict]:
     rows = query(
         "SELECT id::text AS id, title, created_at, updated_at FROM conversations "
-        "ORDER BY updated_at DESC LIMIT %s",
-        (limit,),
+        "WHERE user_id = %s ORDER BY updated_at DESC LIMIT %s",
+        (user_id, limit),
     )
     return [_public(r) for r in rows]
 
 
-def messages(conversation_id: str) -> list[dict]:
-    if not exists(conversation_id):
+def messages(conversation_id: str, user_id: str) -> list[dict]:
+    if not exists(conversation_id, user_id):
         raise ConversationNotFound(conversation_id)
     rows = query(
         "SELECT id, role, content, meta, created_at FROM messages "
@@ -130,9 +133,12 @@ def add_message(conversation_id: str, role: str, content: str, meta: dict | None
         )
 
 
-def delete(conversation_id: str) -> bool:
+def delete(conversation_id: str, user_id: str) -> bool:
     with transaction() as cur:
-        cur.execute("DELETE FROM conversations WHERE id = %s RETURNING id", (conversation_id,))
+        cur.execute(
+            "DELETE FROM conversations WHERE id = %s AND user_id = %s RETURNING id",
+            (conversation_id, user_id),
+        )
         return cur.fetchone() is not None
 
 

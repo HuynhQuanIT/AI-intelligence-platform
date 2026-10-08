@@ -8,7 +8,33 @@ export type Page =
   | 'Model Routing'
   | 'Cost Optimization'
   | 'LLMOps Monitoring'
-  | 'Security Center';
+  | 'Security Center'
+  | 'User Management';
+
+export type Role = 'admin' | 'user';
+
+export type User = {
+  id: string;
+  email: string;
+  role: Role;
+  is_active: boolean;
+  created_at: string | null;
+  last_login_at: string | null;
+};
+
+export type UserDetail = User & {
+  email_verified_at: string | null;
+  updated_at: string | null;
+  failed_attempts: number;
+  locked_until: string | null;
+  is_locked: boolean;
+  conversation_count: number;
+  message_count: number;
+  request_count: number;
+  total_tokens: number;
+  total_cost_usd: number;
+  last_request_at: string | null;
+};
 
 export type Conversation = {
   id: string;

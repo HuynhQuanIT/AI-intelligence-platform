@@ -20,16 +20,16 @@ def estimate_cost(provider: str, input_tokens: int, output_tokens: int) -> float
 
 
 def save_request_log(request_id, provider, model, input_tokens,
-                     output_tokens, cost, latency_ms, status, trace):
+                     output_tokens, cost, latency_ms, status, trace, user_id=None):
     with transaction() as cur:
         cur.execute(
             """
             INSERT INTO usage_logs (request_id, provider, model, input_tokens,
-                                    output_tokens, cost_usd, latency_ms, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                    output_tokens, cost_usd, latency_ms, status, user_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (request_id, provider, model, input_tokens,
-             output_tokens, cost, latency_ms, status),
+             output_tokens, cost, latency_ms, status, user_id),
         )
         for item in trace:
             cur.execute(
@@ -46,32 +46,33 @@ async def safe_log(**kwargs):
     except Exception:
         logger.exception("Failed to save request log")
 
-def save_security_event(request_id, blocked, matches):
+def save_security_event(request_id, blocked, matches, user_id=None):
     query(
         """
-        INSERT INTO security_events (request_id, severity, event_type, description)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO security_events (request_id, severity, event_type, description, user_id)
+        VALUES (%s, %s, %s, %s, %s)
         """,
         (
             request_id,
             "high" if blocked else "medium",
             "prompt_injection" if blocked else "context_injection",
             ", ".join(matches),
+            user_id,
         ),
         False,
     )
 
 
-async def safe_security_event(request_id, blocked, matches):
+async def safe_security_event(request_id, blocked, matches, user_id=None):
     try:
-        await asyncio.to_thread(save_security_event, request_id, blocked, matches)
+        await asyncio.to_thread(save_security_event, request_id, blocked, matches, user_id)
     except Exception:
         logger.exception("Failed to save security event")
 
 
-async def log_failure(request_id, provider, model, latency_ms):
+async def log_failure(request_id, provider, model, latency_ms, user_id=None):
     await safe_log(
         request_id=request_id, provider=provider, model=model or "",
         input_tokens=0, output_tokens=0, cost=0,
-        latency_ms=latency_ms, status="error", trace=[],
+        latency_ms=latency_ms, status="error", trace=[], user_id=user_id,
     )

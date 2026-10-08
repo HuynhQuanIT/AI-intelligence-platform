@@ -1086,3 +1086,25 @@ select {
     max-height: 220px;
   }
 }
+/* ---------- Đăng nhập / đăng ký ---------- */
+.auth-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:24px}
+.auth-brand{display:flex;align-items:center;gap:12px;font-size:20px}
+.auth-brand b{display:flex;flex-direction:column;line-height:1.2}
+.auth-brand small{font-size:11px;letter-spacing:.12em;opacity:.7}
+.auth-card{width:100%;max-width:400px;display:flex;flex-direction:column;gap:10px;padding:24px;background:linear-gradient(145deg,#131f32,#101a2a);border:1px solid #293951;border-radius:11px}
+.auth-card form{display:flex;flex-direction:column;gap:10px}
+.auth-card h2{margin:0 0 4px;font:600 20px 'Space Grotesk'}
+.auth-links{display:flex;justify-content:space-between}
+button.link{background:none;border:none;padding:4px 0;color:#5fd4c4;cursor:pointer;text-align:left;font-size:14px}
+button.link:disabled{color:#6b7a93;cursor:default}
+.splash{min-height:100vh;display:flex;align-items:center;justify-content:center;opacity:.7}
+.role-badge{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:10px;background:rgba(95,212,196,.16);font-size:11px}
+.workspace{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button.logout{margin-top:12px}
+select{background:#0b1522;color:inherit;border:1px solid #293951;border-radius:7px;padding:5px 8px;font:inherit}
+select:disabled{opacity:.6}
+
+.password-field{position:relative;display:block}
+.password-field input{padding-right:40px}
+.password-toggle{position:absolute;top:50%;right:6px;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:0;border-radius:6px;background:transparent;color:#8fa3bf;cursor:pointer}
+.password-toggle:hover,.password-toggle:focus-visible{color:#55cfc1;background:#1b2a42;outline:none}
