@@ -5,10 +5,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import auth as auth_api, chat, conversations as conversations_api, documents, health, monitoring, security
+from .api import (
+    auth as auth_api, chat, conversations as conversations_api, documents, groups as groups_api,
+    health, monitoring, security,
+)
 from .core import settings
 from .core.db import init_pool
-from .services import auth, conversations
+from .services import auth, conversations, groups
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +23,7 @@ async def lifespan(app: FastAPI):
     init_pool()
     conversations.ensure_schema()
     auth.ensure_schema()
+    groups.ensure_schema()
     auth.bootstrap_admin()
     yield
 
@@ -33,9 +37,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins(),
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=True,  # cần cho cookie refresh khi frontend gọi trực tiếp (CORS_ORIGINS phải liệt kê cụ thể)
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
-for module in (health, auth_api, chat, conversations_api, documents, monitoring, security):
+for module in (health, auth_api, chat, conversations_api, documents, groups_api, monitoring, security):
     app.include_router(module.router)

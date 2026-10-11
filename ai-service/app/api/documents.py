@@ -7,6 +7,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 
 from ..agents.security import scan_text
+from ..rag.access import viewer_of
 from ..rag import embeddings
 from ..rag.documents import (
     DocumentTooLarge,
@@ -21,7 +22,8 @@ from ..rag.documents import (
     reindex_missing,
 )
 from ..rag.extract import ALLOWED_EXTENSIONS, ExtractError, extension, extract_text
-from ..schemas import Doc
+from ..schemas import Doc, IdsBody
+from ..services import groups
 from .deps import current_user, require_admin
 
 logger = logging.getLogger(__name__)
@@ -87,8 +89,21 @@ async def upload_document(
 
 
 @router.get("/documents")
-def get_docs():
-    return documents()
+def get_docs(user: dict = Depends(current_user)):
+    rows = documents(viewer_of(user))
+    if user["role"] == "admin":
+        # Chỉ admin thấy tài liệu thuộc nhóm nào; người dùng thường không cần biết cấu trúc nhóm.
+        by_doc = groups.groups_of_documents([r["id"] for r in rows])
+        rows = [{**r, "groups": by_doc.get(r["id"], [])} for r in rows]
+    return rows
+
+
+@router.put("/documents/{document_id}/groups", dependencies=admin_only)
+def set_doc_groups(document_id: str, b: IdsBody):
+    try:
+        return {"groups": groups.set_document_groups(valid_document_id(document_id), b.ids)}
+    except groups.GroupError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message)
 
 def valid_document_id(value: str) -> str:
     """id không phải UUID thì coi như không tồn tại (tránh lỗi 500 từ cột uuid)."""
@@ -99,8 +114,8 @@ def valid_document_id(value: str) -> str:
 
 
 @router.get("/documents/{document_id}")
-def get_doc_detail(document_id: str):
-    document = get_document(valid_document_id(document_id))
+def get_doc_detail(document_id: str, user: dict = Depends(current_user)):
+    document = get_document(valid_document_id(document_id), viewer_of(user))
 
     if document is None:
         raise HTTPException(
@@ -119,10 +134,10 @@ def delete_doc(document_id: str):
 
 
 @router.get("/documents/{document_id}/file")
-def download_doc(document_id: str):
+def download_doc(document_id: str, user: dict = Depends(current_user)):
     document_id = valid_document_id(document_id)
     try:
-        found = get_document_file(document_id)
+        found = get_document_file(document_id, viewer_of(user))
     except NoOriginalFile:
         raise HTTPException(
             status_code=404,

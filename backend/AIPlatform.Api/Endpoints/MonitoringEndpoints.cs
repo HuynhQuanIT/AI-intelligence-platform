@@ -12,6 +12,9 @@ public static class MonitoringEndpoints
         app.MapGet("/api/platform/metrics",
             async (IHttpClientFactory f) => await AiProxy.Get(f, "/metrics"));
 
+        app.MapGet("/api/platform/metrics/users",
+            async (IHttpClientFactory f) => await AiProxy.Get(f, "/metrics/users"));
+
         app.MapGet("/api/platform/traces",
             async (IHttpClientFactory f) => await AiProxy.Get(f, "/traces"));
 

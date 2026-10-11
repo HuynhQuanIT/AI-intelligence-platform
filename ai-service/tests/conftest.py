@@ -14,6 +14,8 @@ os.environ["ADMIN_PASSWORD"] = "Admin-test-pass-123"
 os.environ["MAIL_BACKEND"] = "memory"
 os.environ["REGISTRATION_MODE"] = "approval"
 os.environ["CHAT_RATE_LIMIT_PER_MIN"] = "1000"
+os.environ["DAILY_MESSAGE_QUOTA"] = "0"  # test hạn mức đặt giới hạn riêng cho từng user
+os.environ["COOKIE_PATH"] = "/auth"
 
 import pytest
 

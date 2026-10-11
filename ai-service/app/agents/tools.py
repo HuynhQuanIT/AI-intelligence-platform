@@ -9,6 +9,7 @@ import uuid
 
 from ..core.db import query
 from ..rag import documents as rag_documents, retrieval as rag_retrieval
+from ..rag.access import PUBLIC_ONLY
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +39,9 @@ def _text(args, key, max_len):
 
 # --------------------------- các công cụ ---------------------------
 
-def list_documents(args):
+def list_documents(args, viewer=PUBLIC_ONLY):
     limit = _int(args, "limit", 10, 1, MAX_LIST)
-    all_rows = rag_documents.documents()
+    all_rows = rag_documents.documents(viewer)
     rows = all_rows[:limit]
     return {
         "total": len(all_rows),
@@ -61,10 +62,10 @@ def list_documents(args):
     }
 
 
-def search_documents(args):
+def search_documents(args, viewer=PUBLIC_ONLY):
     text = _text(args, "query", 300)
     limit = _int(args, "limit", 4, 1, MAX_SEARCH)
-    hits = rag_retrieval.retrieve(text, limit)
+    hits = rag_retrieval.retrieve(text, limit, viewer)
     return {
         "count": len(hits),
         "results": [
@@ -80,7 +81,7 @@ def search_documents(args):
     }
 
 
-def read_document(args):
+def read_document(args, viewer=PUBLIC_ONLY):
     raw_id = _text(args, "document_id", 64)
     try:
         document_id = str(uuid.UUID(raw_id))
@@ -90,7 +91,7 @@ def read_document(args):
     start = _int(args, "start_chunk", 0, 0, 100000)
     count = _int(args, "count", 3, 1, MAX_READ_CHUNKS)
 
-    document = rag_documents.get_document(document_id)
+    document = rag_documents.get_document(document_id, viewer)
     if document is None:
         raise ToolError("Không có tài liệu với id này.")
 
@@ -139,7 +140,7 @@ def _eval(node, depth=0):
     raise ToolError("Chỉ hỗ trợ số và các phép + - * / // % ** cùng dấu ngoặc.")
 
 
-def calculate(args):
+def calculate(args, viewer=PUBLIC_ONLY):
     expression = _text(args, "expression", 10_000)
     if len(expression) > 200:
         raise ToolError("Biểu thức quá dài (tối đa 200 ký tự).")
@@ -211,10 +212,10 @@ def specs(names):
     ]
 
 
-def run_tool(name: str, args: dict) -> dict:
+def run_tool(name: str, args: dict, viewer: dict = PUBLIC_ONLY) -> dict:
     """Đồng bộ (gọi trong thread). Ném ToolError nếu đầu vào sai."""
     if name not in TOOLS:
         raise ToolError(f"Công cụ '{name}' không tồn tại.")
     if not isinstance(args, dict):
         raise ToolError("Tham số phải là một object.")
-    return TOOLS[name]["run"](args)
+    return TOOLS[name]["run"](args, viewer)

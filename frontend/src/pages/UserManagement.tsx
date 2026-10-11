@@ -131,6 +131,10 @@ export default function UserManagement({ setErr }: Props) {
           isSelf={selectedId === me?.id}
           onClose={() => setSelectedId('')}
           onChanged={load}
+          onDeleted={() => {
+            setSelectedId('');
+            load();
+          }}
         />
       )}
     </>

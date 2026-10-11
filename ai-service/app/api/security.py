@@ -48,14 +48,16 @@ def security_events():
     return query(
         """
         SELECT
-            id,
-            request_id,
-            severity,
-            event_type,
-            description,
-            created_at
-        FROM security_events
-        ORDER BY id DESC
+            e.id,
+            e.request_id,
+            e.severity,
+            e.event_type,
+            e.description,
+            e.created_at,
+            u.email AS user_email
+        FROM security_events e
+        LEFT JOIN users u ON u.id = e.user_id
+        ORDER BY e.id DESC
         LIMIT 100
         """
     )

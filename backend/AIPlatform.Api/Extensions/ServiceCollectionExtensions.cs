@@ -28,7 +28,8 @@ public static class ServiceCollectionExtensions
             o.AddDefaultPolicy(p =>
                 p.WithOrigins("http://localhost:5173")
                  .AllowAnyHeader()
-                 .AllowAnyMethod()));
+                 .AllowAnyMethod()
+                 .AllowCredentials())); // cookie refresh khi frontend gọi thẳng gateway (dev)
 
         return services;
     }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, ShieldCheck } from 'lucide-react';
 import { api } from '../api/client';
 import Panel from '../components/Panel';
+import UserUsageTable from '../components/UserUsageTable';
 import type { PlatformData } from '../types';
 
 const POSTURE = [
@@ -65,6 +66,10 @@ export default function SecurityCenter({ events, refresh, setErr }: Props) {
         </Panel>
       </div>
 
+      <Panel title="Rủi ro theo người dùng">
+        <UserUsageTable mode="security" reloadKey={events.length} />
+      </Panel>
+
       <Panel title="Security events">
         {events.length ? (
           events.map((event) => (
@@ -75,7 +80,10 @@ export default function SecurityCenter({ events, refresh, setErr }: Props) {
                 <b>
                   {event.event_type} · {event.severity}
                 </b>
-                <small>{event.description}</small>
+                <small>
+                  {event.user_email ? `${event.user_email} · ` : ''}
+                  {event.description}
+                </small>
               </div>
             </div>
           ))

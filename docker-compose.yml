@@ -61,7 +61,12 @@
 
       # Đăng nhập và phân quyền (xem .env.example)
       JWT_SECRET: "${JWT_SECRET:?Hãy đặt JWT_SECRET trong .env (chuỗi ngẫu nhiên >= 32 ký tự)}"
-      ACCESS_TOKEN_MINUTES: "${ACCESS_TOKEN_MINUTES:-60}"
+      ACCESS_TOKEN_MINUTES: "${ACCESS_TOKEN_MINUTES:-15}"
+      REFRESH_TOKEN_DAYS: "${REFRESH_TOKEN_DAYS:-14}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      COOKIE_PATH: "${COOKIE_PATH:-/api/platform/auth}"
+      DAILY_MESSAGE_QUOTA: "${DAILY_MESSAGE_QUOTA:-50}"
+      QUOTA_TIMEZONE: "${QUOTA_TIMEZONE:-Asia/Ho_Chi_Minh}"
       OTP_PEPPER: "${OTP_PEPPER:-}"
       ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"

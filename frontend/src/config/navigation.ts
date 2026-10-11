@@ -6,12 +6,14 @@ import {
   LayoutDashboard,
   MessageSquare,
   ShieldCheck,
+  UserCircle,
+  UserCog,
   Users,
   Workflow,
 } from 'lucide-react';
 import type { Page, Role } from '../types';
 
-export const GROUPS = ['OVERVIEW', 'BUILD', 'OPTIMIZE', 'OBSERVE', 'ADMIN'] as const;
+export const GROUPS = ['OVERVIEW', 'BUILD', 'OPTIMIZE', 'OBSERVE', 'ADMIN', 'ACCOUNT'] as const;
 
 type NavItem = { name: Page; icon: typeof Bot; group: (typeof GROUPS)[number]; roles: Role[] };
 
@@ -28,6 +30,8 @@ export const NAV_ITEMS: NavItem[] = [
   { name: 'LLMOps Monitoring', icon: Activity, group: 'OBSERVE', roles: ['admin'] },
   { name: 'Security Center', icon: ShieldCheck, group: 'OBSERVE', roles: ['admin'] },
   { name: 'User Management', icon: Users, group: 'ADMIN', roles: ['admin'] },
+  { name: 'Groups', icon: UserCog, group: 'ADMIN', roles: ['admin'] },
+  { name: 'My Account', icon: UserCircle, group: 'ACCOUNT', roles: ALL },
 ];
 
 export function pagesFor(role: Role): NavItem[] {
@@ -47,5 +51,7 @@ export const PAGE_DESCRIPTIONS: Record<Page, string> = {
   'Cost Optimization': 'Track tokens and estimated AI spend.',
   'LLMOps Monitoring': 'Inspect latency, usage and traces.',
   'Security Center': 'Scan suspicious prompts and review events.',
-  'User Management': 'Approve accounts and manage roles.',
+  'User Management': 'Approve accounts, manage roles, quotas and sign-in.',
+  Groups: 'Group users and control who can read which documents.',
+  'My Account': 'Your usage quota and password.',
 };

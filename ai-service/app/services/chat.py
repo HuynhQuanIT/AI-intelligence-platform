@@ -2,6 +2,7 @@
 import asyncio
 import logging
 
+from ..rag.access import PUBLIC_ONLY
 from ..schemas import Chat
 from . import conversations
 from .telemetry import estimate_cost, safe_log, safe_security_event
@@ -9,7 +10,7 @@ from .telemetry import estimate_cost, safe_log, safe_security_event
 logger = logging.getLogger(__name__)
 
 
-def initial_state(b: Chat, history: list, stream: bool = False) -> dict:
+def initial_state(b: Chat, history: list, stream: bool = False, viewer: dict | None = None) -> dict:
     return {
         "message": b.message,
         "use_rag": b.use_rag,
@@ -26,6 +27,8 @@ def initial_state(b: Chat, history: list, stream: bool = False) -> dict:
         "blocked": False,
         "security_matches": [],
         "stream": stream,
+        # Người xem quyết định tài liệu nào được truy xuất; mặc định chỉ thấy tài liệu công khai.
+        "viewer": viewer or PUBLIC_ONLY,
     }
 
 

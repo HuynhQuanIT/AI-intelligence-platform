@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, apiFetch, errorMessageOf } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { readSse } from '../api/sse';
 import type { ChatMessage, Conversation, LiveStep } from '../types';
 
@@ -15,6 +16,7 @@ export function useChat({ refresh, setErr }: Options) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [liveStep, setLiveStep] = useState('');
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const { refreshUser } = useAuth(); // nạp lại hạn mức còn lại sau mỗi lượt chat
 
   useEffect(() => {
     loadConversations();
@@ -143,7 +145,7 @@ export function useChat({ refresh, setErr }: Options) {
         throw new Error('Kết nối bị ngắt trước khi nhận đủ câu trả lời.');
       }
 
-      await Promise.all([refresh(), loadConversations()]);
+      await Promise.all([refresh(), loadConversations(), refreshUser()]);
     } catch (error: any) {
       // Bỏ bong bóng AI đang dở; tin nhắn người dùng vẫn được lưu trong hội thoại.
       setChat((current) =>
@@ -153,6 +155,7 @@ export function useChat({ refresh, setErr }: Options) {
       );
       setErr('Chat request failed: ' + error.message);
       loadConversations();
+      refreshUser();
     } finally {
       setSending(false);
       setLiveStep('');

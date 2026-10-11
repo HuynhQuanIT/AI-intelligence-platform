@@ -58,6 +58,7 @@ class State(TypedDict):
     blocked: bool
     security_matches: list
     stream: bool
+    viewer: dict
 
 
 def step(name: str, status: str, detail: str) -> dict:
@@ -115,7 +116,7 @@ def build():
         if "knowledge" not in s["enabled"]:
             return {"context": [], "trace": s["trace"] + [step("knowledge", "skipped", "Knowledge Agent is disabled")]}
 
-        docs, info = await asyncio.to_thread(retrieve_ex, s["message"])
+        docs, info = await asyncio.to_thread(retrieve_ex, s["message"], 4, s.get("viewer"))
         how = info["mode"] + (": " + info["reason"] if info["reason"] else "")
         # Quay về từ khóa vì LỖI (không phải vì cấu hình) thì đánh dấu để dễ thấy.
         status = "degraded" if info["reason"].startswith("vector search failed") else "completed"
@@ -216,7 +217,7 @@ def build():
             started = time.perf_counter()
             try:
                 result = await asyncio.wait_for(
-                    asyncio.to_thread(tools.run_tool, name, args),
+                    asyncio.to_thread(tools.run_tool, name, args, s.get("viewer")),
                     TOOL_TIMEOUT_SECONDS,
                 )
             except tools.ToolError as exc:

@@ -1,11 +1,14 @@
 import { BrainCircuit, Plus, Send, Trash2 } from 'lucide-react';
+import { useAuth } from '../auth/AuthContext';
 import Markdown from '../components/Markdown';
+import QuotaBar from '../components/QuotaBar';
 import { useChat } from '../hooks/useChat';
 import type { PlatformData } from '../types';
 
 type Props = Pick<PlatformData, 'refresh' | 'setErr'>;
 
 export default function Playground({ refresh, setErr }: Props) {
+  const { user } = useAuth();
   const {
     q, setQ, chat, useRag, setUseRag, sending, conversations, activeId, liveStep, messagesRef,
     openConversation, newConversation, removeConversation, send,
@@ -48,6 +51,7 @@ export default function Playground({ refresh, setErr }: Props) {
           <div>
             <b>RAG Assistant</b>
             <div className="muted">AI request playground</div>
+            <QuotaBar quota={user?.quota} />
           </div>
 
           <div className="chat-actions">

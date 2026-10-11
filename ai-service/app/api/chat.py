@@ -10,8 +10,9 @@ from fastapi.responses import StreamingResponse
 from google.genai.errors import ServerError
 
 from ..agents.graph import graph
+from ..rag.access import viewer_of
 from ..core import settings
-from ..services import conversations, ratelimit
+from ..services import auth, conversations, ratelimit
 from ..services.chat import finish_chat, initial_state, prepare_conversation
 from ..services.telemetry import log_failure
 from ..schemas import Chat
@@ -32,6 +33,15 @@ def check_rate_limit(user: dict) -> None:
         )
 
 
+def check_quota(user: dict) -> None:
+    """Hạn mức tin nhắn mỗi ngày (khác giới hạn tốc độ mỗi phút)."""
+    try:
+        auth.check_quota(user)
+    except auth.AuthError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message,
+                            headers={"Retry-After": str(exc.retry_after or 60)})
+
+
 async def prepare(b: Chat, user: dict):
     try:
         return await prepare_conversation(b, user["id"])
@@ -42,6 +52,7 @@ async def prepare(b: Chat, user: dict):
 @router.post("/chat")
 async def chat(b: Chat, user: dict = Depends(current_user)):
     check_rate_limit(user)
+    check_quota(user)
     start_time = time.perf_counter()
     request_id = str(uuid.uuid4())
     provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
@@ -52,7 +63,7 @@ async def chat(b: Chat, user: dict = Depends(current_user)):
     conversation_id, history = await prepare(b, user)
 
     try:
-        state = await graph.ainvoke(initial_state(b, history))
+        state = await graph.ainvoke(initial_state(b, history, viewer=viewer_of(user)))
     except ServerError as exc:
         logger.exception("Gemini service error. Request ID: %s", request_id)
         await log_failure(request_id, provider, b.model, elapsed_ms(), user["id"])
@@ -87,6 +98,7 @@ async def chat_stream(b: Chat, user: dict = Depends(current_user)):
       error  {detail}
     """
     check_rate_limit(user)
+    check_quota(user)
     start_time = time.perf_counter()
     request_id = str(uuid.uuid4())
     provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
@@ -100,7 +112,7 @@ async def chat_stream(b: Chat, user: dict = Depends(current_user)):
     async def events():
         yield sse("start", {"request_id": request_id, "conversation_id": conversation_id})
 
-        state = initial_state(b, history, stream=True)
+        state = initial_state(b, history, stream=True, viewer=viewer_of(user))
         emitted = 0
         streamed = False
 
@@ -129,7 +141,7 @@ async def chat_stream(b: Chat, user: dict = Depends(current_user)):
                 yield sse("delta", {"delta": state["answer"]})
 
             payload = await finish_chat(
-                request_id, provider, state, elapsed_ms(), conversation_id
+                request_id, provider, state, elapsed_ms(), conversation_id, user["id"]
             )
             yield sse("done", payload)
 

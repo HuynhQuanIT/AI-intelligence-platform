@@ -9,9 +9,21 @@ export type Page =
   | 'Cost Optimization'
   | 'LLMOps Monitoring'
   | 'Security Center'
-  | 'User Management';
+  | 'User Management'
+  | 'Groups'
+  | 'My Account';
 
 export type Role = 'admin' | 'user';
+
+export type Quota = {
+  limit: number | null; // null = không giới hạn
+  used: number;
+  remaining: number | null;
+  is_default: boolean;
+  resets_at: string;
+};
+
+export type GroupRef = { id: string; name: string };
 
 export type User = {
   id: string;
@@ -20,6 +32,37 @@ export type User = {
   is_active: boolean;
   created_at: string | null;
   last_login_at: string | null;
+  daily_message_quota?: number | null;
+  quota?: Quota; // chỉ có ở /auth/me
+};
+
+export type Group = {
+  id: string;
+  name: string;
+  description: string;
+  member_count: number;
+  document_count: number;
+};
+
+export type GroupDetail = Group & {
+  members: { id: string; email: string }[];
+  documents: { id: string; title: string }[];
+};
+
+export type UserUsage = {
+  id: string;
+  email: string;
+  role: Role;
+  is_active: boolean;
+  requests: number;
+  blocked: number;
+  errors: number;
+  tokens: number;
+  cost_usd: number;
+  today: number;
+  last_at: string | null;
+  security_events: number;
+  quota_limit: number | null;
 };
 
 export type UserDetail = User & {
@@ -34,6 +77,8 @@ export type UserDetail = User & {
   total_tokens: number;
   total_cost_usd: number;
   last_request_at: string | null;
+  quota: Quota;
+  groups: GroupRef[];
 };
 
 export type Conversation = {
@@ -68,6 +113,7 @@ export type DocumentRow = {
   created_at: string;
   size_bytes?: number | null;
   has_file?: boolean;
+  groups?: GroupRef[]; // chỉ admin nhận; rỗng = công khai cho mọi người đã đăng nhập
 };
 
 export type DocumentDetail = {
@@ -91,6 +137,7 @@ export type SecurityEvent = {
   event_type: string;
   severity: string;
   description: string;
+  user_email?: string | null;
 };
 
 export type Totals = {

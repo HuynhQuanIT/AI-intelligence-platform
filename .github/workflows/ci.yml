@@ -77,6 +77,9 @@ jobs:
       - name: Install
         working-directory: frontend
         run: npm ci
+      - name: Dependency audit (fails on high severity)
+        working-directory: frontend
+        run: npm audit --audit-level=high
       - name: Build
         working-directory: frontend
         run: npm run build
@@ -92,6 +95,118 @@ jobs:
           dotnet-version: 8.0.x
       - name: Build
         run: dotnet build backend/AIPlatform.Api/AIPlatform.Api.csproj -c Release
+
+  e2e:
+    name: "e2e (Playwright - giao diện thật qua gateway, ai-service, PostgreSQL)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: aiplatform
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: platform_dev_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U platform -d aiplatform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Mã OTP nằm trong log ai-service (MAIL_BACKEND=console); test đọc file này.
+      E2E_AI_LOG: ${{ github.workspace }}/ai-service.log
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ai-service/requirements.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install ai-service dependencies
+        run: pip install -r ai-service/requirements.txt
+
+      - name: Create database schema
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          PGPASSWORD=platform_dev_password psql -h localhost -U platform -d aiplatform \
+            -v ON_ERROR_STOP=1 -f infra/postgres/init.sql
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish gateway
+        run: dotnet publish backend/AIPlatform.Api/AIPlatform.Api.csproj -c Release -o gateway-out
+
+      - name: Start ai-service, gateway and frontend
+        run: |
+          cd ai-service
+          DATABASE_URL=postgresql://platform:platform_dev_password@localhost:5432/aiplatform \
+          LLM_PROVIDER=mock STORAGE_BACKEND=local UPLOAD_DIR=$RUNNER_TEMP/uploads \
+          JWT_SECRET=e2e-only-secret-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk \
+          ADMIN_EMAIL=admin@e2e.local ADMIN_PASSWORD=Admin-e2e-pass-123 \
+          MAIL_BACKEND=console REGISTRATION_MODE=approval DAILY_MESSAGE_QUOTA=50 \
+          CHAT_RATE_LIMIT_PER_MIN=1000 PYTHONUNBUFFERED=1 \
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$E2E_AI_LOG" 2>&1 &
+          cd ..
+          ASPNETCORE_URLS=http://localhost:5000 ASPNETCORE_ENVIRONMENT=Production \
+          AiService__BaseUrl=http://127.0.0.1:8000 \
+          nohup dotnet gateway-out/AIPlatform.Api.dll > gateway.log 2>&1 &
+          cd frontend
+          nohup npx vite preview --port 5173 --strictPort > ../preview.log 2>&1 &
+          cd ..
+          for i in $(seq 1 60); do
+            curl -fs http://127.0.0.1:8000/health >/dev/null \
+              && curl -fs http://localhost:5000/api/platform/auth/me -o /dev/null -w '%{http_code}' | grep -q 401 \
+              && curl -fs http://localhost:5173/ >/dev/null && echo "services ready" && exit 0
+            sleep 2
+          done
+          echo "services did not start"; tail -n 40 ai-service.log gateway.log preview.log; exit 1
+
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: e2e
+        env:
+          E2E_ADMIN_EMAIL: admin@e2e.local
+          E2E_ADMIN_PASSWORD: Admin-e2e-pass-123
+        run: npx playwright test
+
+      - name: Upload report and logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+            ai-service.log
+            gateway.log
+            preview.log
+          if-no-files-found: ignore
 
   compose:
     name: docker compose config

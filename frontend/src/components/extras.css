@@ -1,0 +1,56 @@
+/* Giao diện cho tính năng mới (hạn mức, tài khoản, nhóm, nút nguy hiểm). Tách riêng khỏi styles.css. */
+.quota{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.quota-track{height:8px;border-radius:99px;background:#1a263b;overflow:hidden}
+.quota-fill{height:100%;border-radius:99px;transition:width .3s}
+.quota-fill.ok{background:#3ecf8e}
+.quota-fill.warn{background:#f5b84b}
+.quota-fill.full{background:#ff6b6b}
+.quota-text{margin:0;font-size:11px;color:#9fb0c9}
+.form-stack{display:flex;flex-direction:column;gap:10px;max-width:420px}
+.inline-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.inline-form input[type=number],.inline-form input[type=email],.inline-form input[type=text]{max-width:240px}
+button.danger{background:#3a1620;border:1px solid #7a2a3a;color:#ffb3bf;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;cursor:pointer;font:inherit}
+button.danger:hover:not(:disabled){background:#4a1b28}
+button.danger:disabled{opacity:.5;cursor:not-allowed}
+.chip{display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:99px;background:#16243b;border:1px solid #2a3b57;font-size:11px;color:#bcd0ee}
+.chip.public{background:#12301f;border-color:#235a3b;color:#8fe3b3}
+.success-note{color:#8fe3b3;font-size:12px;margin:8px 0 0}
+@media (max-width:900px){}
+
+/* Danh sách tick chọn (nhóm, thành viên): ghi đè label/input toàn cục vốn làm lệch ô tick. */
+.checklist{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow:auto;padding:8px;border:1px solid #243148;border-radius:12px;background:#0b1524}
+.checklist label{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;margin:0;padding:11px 12px;border-radius:9px;cursor:pointer;font-size:15px;color:#e5edf8;line-height:1.35}
+.checklist label:hover{background:#13213a}
+.checklist label small{font-size:13px;color:#8fa3bf}
+.checklist input[type=checkbox]{width:19px;height:19px;padding:0;margin:0;flex:none;accent-color:#55cfc1;cursor:pointer}
+.checklist .grow{flex:1;min-width:0;overflow-wrap:anywhere}
+
+/* Quyền xem tài liệu ở Knowledge Center */
+.doc-groups{display:flex;flex-direction:column;gap:12px;margin:8px 0 14px;padding:16px;border:1px solid #2a3b57;border-radius:12px;background:#0e182a}
+.doc-groups > small{font-size:14px;line-height:1.55;color:#b5c5dd}
+.doc-groups button{font-size:14px;padding:10px 16px}
+
+/* Trang Groups */
+.group-page{display:flex;flex-direction:column;gap:16px;font-size:15px}
+.group-page h3{font-size:17px}
+.group-page .note,.group-page .muted{font-size:14px;line-height:1.55}
+.group-page label{font-size:14px;color:#b5c5dd;margin:14px 0 6px}
+.group-page input[type=text],.group-page input:not([type]){font-size:15px;padding:12px 14px}
+.group-page button{font-size:14px}
+.group-page .subhead{font-size:15px;margin:22px 0 10px}
+.group-layout{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:18px;align-items:start}
+@media (max-width:900px){.group-layout{grid-template-columns:1fr}}
+.group-item{display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;padding:14px 16px;margin-bottom:8px;border-radius:12px;background:#101a2c;border:1px solid #243148;color:inherit;cursor:pointer;font:inherit}
+.group-item:hover{border-color:#3a4f73}
+.group-item.active{border-color:#55cfc1;background:#13263a}
+.group-item b{font-size:16px}
+.group-item small{font-size:13px;color:#8fa3bf}
+.howto{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:900px){.howto{grid-template-columns:1fr}}
+.howto div{padding:14px 16px;border:1px solid #243148;border-radius:12px;background:#0e182a;font-size:14px;line-height:1.5;color:#b5c5dd}
+.howto b{display:block;margin-bottom:4px;font-size:15px;color:#e5edf8}
+.howto .step{display:inline-grid;place-items:center;width:24px;height:24px;margin-right:8px;border-radius:50%;background:#55cfc1;color:#07202a;font-weight:700;font-size:13px}
+.search-row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:6px 0 10px}
+.search-row input{max-width:320px}
+.search-row small{font-size:14px;color:#9fb0c9}
+.role-chip{margin-left:auto;font-size:12px;padding:2px 8px;border-radius:99px;background:#2b2442;color:#cdb8ff;white-space:nowrap}

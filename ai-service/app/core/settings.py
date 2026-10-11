@@ -23,7 +23,30 @@ def jwt_secret() -> str:
 
 
 def access_token_minutes() -> int:
-    return env_int("ACCESS_TOKEN_MINUTES", 60)
+    return env_int("ACCESS_TOKEN_MINUTES", 15)
+
+
+def refresh_token_days() -> int:
+    return max(1, env_int("REFRESH_TOKEN_DAYS", 14))
+
+
+def cookie_secure() -> bool:
+    """Bật khi chạy qua HTTPS (COOKIE_SECURE=true). Trình duyệt không gửi cookie Secure qua http thường."""
+    return env("COOKIE_SECURE").lower() in {"1", "true", "yes"}
+
+
+def cookie_path() -> str:
+    """Đường dẫn cookie refresh: chỉ được gửi tới nhóm endpoint /auth (qua gateway là /api/platform/auth)."""
+    return env("COOKIE_PATH", "/api/platform/auth")
+
+
+def daily_message_quota() -> int:
+    """Số tin nhắn mỗi người mỗi ngày (mặc định chung). 0 = không giới hạn."""
+    return max(0, env_int("DAILY_MESSAGE_QUOTA", 50))
+
+
+def quota_timezone() -> str:
+    return env("QUOTA_TIMEZONE", "Asia/Ho_Chi_Minh")
 
 
 def registration_mode() -> str:

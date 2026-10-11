@@ -2,6 +2,7 @@ import { Bot, Boxes, ChevronRight, CircleDollarSign, Gauge, Zap } from 'lucide-r
 import Panel from '../components/Panel';
 import Stat from '../components/Stat';
 import TraceTable from '../components/TraceTable';
+import UserUsageTable from '../components/UserUsageTable';
 import { NAV_ITEMS } from '../config/navigation';
 import type { Page, PlatformData } from '../types';
 
@@ -45,6 +46,10 @@ export default function Dashboard({ metrics, agents, traces, onNavigate }: Props
           ))}
         </Panel>
       </div>
+
+      <Panel title="Sử dụng theo người dùng">
+        <UserUsageTable mode="usage" reloadKey={total.requests ?? 0} />
+      </Panel>
 
       <Panel title="Recent execution traces">
         <TraceTable rows={traces.slice(0, 8)} />

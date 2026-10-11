@@ -28,6 +28,10 @@ public static class DocumentEndpoints
             async (string documentId, IHttpClientFactory f) =>
                 await AiProxy.Delete(f, $"/documents/{Uri.EscapeDataString(documentId)}"));
 
+        group.MapPut("/{documentId}/groups",
+            async (string documentId, HttpRequest r, IHttpClientFactory f) =>
+                await AiProxy.Put(r, f, $"/documents/{Uri.EscapeDataString(documentId)}/groups"));
+
         group.MapGet("/{documentId}/file", Download);
 
         return app;

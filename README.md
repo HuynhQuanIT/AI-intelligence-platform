@@ -82,15 +82,20 @@ Sign-in is email + password. OTP by email is used only to verify an email when r
 | Knowledge Center (read, download) | yes | yes |
 | Upload / delete / reindex documents | yes | no |
 | Agent Studio, Dashboard, traces, metrics, Security Center | yes | no |
-| User management (approve, deactivate, change role) | yes | no |
+| User management (approve, deactivate, change role, reset password, change email, delete, daily quota) | yes | no |
+| Groups and per-document access (who may read which document) | yes | no |
+| Change own password, see own daily quota | yes | yes |
 
 1. Set `JWT_SECRET` (>= 32 random chars), `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env`; the first admin is created at startup. Without a valid `JWT_SECRET` the service refuses to start.
 2. `REGISTRATION_MODE` decides who may self-register: `approval` (default, admin must approve), `domain`, `open` or `closed`.
 3. OTP mail: `MAIL_BACKEND=console` prints the code in the ai-service log (local testing only); `smtp` sends real mail (Gmail needs 2-step verification and an App Password; use a dedicated mail service for production).
-4. Security: scrypt password hashes (>= 10 chars); OTP stored as HMAC, 6 digits, 5 minutes, single use, 5 attempts, resend every 60 s (3 per 10 min, per email and per IP); 5 wrong passwords lock the account for 15 min; the JWT lasts 60 min and is re-checked against the database on every request, so deactivating a user, changing a role or resetting a password logs old sessions out immediately; login and reset errors never reveal whether an email exists.
+4. Security: scrypt password hashes (>= 10 chars); OTP stored as HMAC, 6 digits, 5 minutes, single use, 5 attempts, resend every 60 s (3 per 10 min, per email and per IP); 5 wrong passwords lock the account for 15 min; the access token (JWT) lasts 15 min and is re-checked against the database on every request, so deactivating a user, changing a role, changing or resetting a password logs old sessions out immediately; login and reset errors never reveal whether an email exists.
 5. Existing conversations are assigned to the first admin. The document store is shared by everyone who can sign in, so keep `REGISTRATION_MODE=approval` (or `domain`) if documents are sensitive.
-6. Limits: the chat rate limit and IP login throttling are kept in memory (reset on restart, not shared between instances; move to Redis before scaling out); lockout and OTP state live in PostgreSQL. The JWT is kept in the browser's `localStorage`; there is no refresh token (sign in again after 60 min). One organisation per deployment.
-7. ai-service trusts the `X-Real-IP` set by nginx for per-IP limits, so do not expose ai-service or the gateway port directly to the internet. Compose publishes ai-service on 127.0.0.1 only.
+6. Limits: the chat rate limit and IP login throttling are kept in memory (reset on restart, not shared between instances; move to Redis before scaling out); lockout and OTP state live in PostgreSQL. One organisation per deployment.
+7. Sessions: the access token lives only in browser memory. A random refresh token (stored hashed, 14 days, rotated on every use) lives in an `httpOnly`, `SameSite=Strict` cookie scoped to `/api/platform/auth`; `/auth/refresh` and `/auth/logout` also require the header `X-Requested-With: aip`. Re-using an already rotated refresh token (outside a 10 s grace window for parallel tabs) revokes the whole token family. Set `COOKIE_SECURE=true` behind HTTPS.
+8. Daily quota: `DAILY_MESSAGE_QUOTA` (default 50, `0` = unlimited) per user per day in `QUOTA_TIMEZONE`; admins can override it per user. Only successful answers count; the limit applies to `/chat` and `/chat/stream` (HTTP 429 with `Retry-After`).
+9. Document groups: a document with no group is visible to every signed-in user; a document with one or more groups is visible only to members of those groups and to admins. The same rule filters the document list, viewer, download, RAG retrieval and the agent's tools. A group cannot be deleted while it is the only group of a document. Admins always see everything.
+10. ai-service trusts the `X-Real-IP` set by nginx for per-IP limits, so do not expose ai-service or the gateway port directly to the internet. Compose publishes ai-service on 127.0.0.1 only.
 
 ## Tests
 ```bash

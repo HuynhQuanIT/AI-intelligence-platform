@@ -6,6 +6,7 @@ import uuid
 
 from ..core.db import query, transaction
 from . import embeddings, storage
+from .access import PUBLIC_ONLY, visible_sql
 from .chunking import split_text
 from .extract import extension
 
@@ -136,20 +137,23 @@ def add_uploaded_document(filename, title, data, text):
     return _result(did, title, display_name, chunks, vectors, len(data))
 
 
-def documents():
+def documents(viewer=PUBLIC_ONLY):
+    cond, params = visible_sql(viewer)
     return query(
         """
         SELECT
-            id::text,
-            title,
-            filename,
-            status,
-            created_at,
-            size_bytes,
-            (object_key IS NOT NULL) AS has_file
-        FROM documents
-        ORDER BY created_at DESC
-        """
+            d.id::text,
+            d.title,
+            d.filename,
+            d.status,
+            d.created_at,
+            d.size_bytes,
+            (d.object_key IS NOT NULL) AS has_file
+        FROM documents d
+        WHERE """ + cond + """
+        ORDER BY d.created_at DESC
+        """,
+        params,
     )
 
 def delete_document(document_id):
@@ -171,11 +175,12 @@ def delete_document(document_id):
     return True
 
 
-def get_document_file(document_id):
-    """Trả (filename, content_type, bytes) hoặc None nếu không có tài liệu."""
+def get_document_file(document_id, viewer=PUBLIC_ONLY):
+    """Trả (filename, content_type, bytes) hoặc None nếu không có tài liệu (hoặc người xem không có quyền)."""
+    cond, params = visible_sql(viewer)
     rows = query(
-        "SELECT filename, content_type, object_key FROM documents WHERE id = %s",
-        (document_id,),
+        "SELECT d.filename, d.content_type, d.object_key FROM documents d WHERE d.id = %s AND " + cond,
+        (document_id, *params),
     )
     if not rows:
         return None
@@ -188,7 +193,8 @@ def get_document_file(document_id):
     return row["filename"], row["content_type"] or "application/octet-stream", data
 
 
-def get_document(document_id):
+def get_document(document_id, viewer=PUBLIC_ONLY):
+    cond, params = visible_sql(viewer)
     rows = query(
         """
         SELECT
@@ -202,10 +208,10 @@ def get_document(document_id):
         FROM documents d
         LEFT JOIN document_chunks c
             ON c.document_id = d.id
-        WHERE d.id = %s
+        WHERE d.id = %s AND """ + cond + """
         ORDER BY c.chunk_index
         """,
-        (document_id,)
+        (document_id, *params)
     )
 
     if not rows:

@@ -39,4 +39,39 @@ public static class AiProxy
             path,
             new StringContent(body, Encoding.UTF8, "application/json")));
     }
+
+    /// <summary>POST nguyên văn body JSON (có thể rỗng) rồi đưa Set-Cookie của ai-service về trình duyệt.
+    /// Dùng cho login/refresh/logout/đổi mật khẩu: refresh token nằm trong cookie httpOnly.</summary>
+    public static async Task<IResult> PostWithCookies(HttpContext ctx, IHttpClientFactory f, string path)
+    {
+        using var reader = new StreamReader(ctx.Request.Body);
+        var body = await reader.ReadToEndAsync();
+
+        HttpContent? content = body.Length == 0
+            ? null
+            : new StringContent(body, Encoding.UTF8, "application/json");
+
+        var response = await f.AiClient().PostAsync(path, content);
+
+        if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
+        {
+            foreach (var cookie in cookies)
+            {
+                ctx.Response.Headers.Append("Set-Cookie", cookie);
+            }
+        }
+
+        return await Relay(response);
+    }
+
+    /// <summary>PUT nguyên văn body JSON của request hiện tại.</summary>
+    public static async Task<IResult> Put(HttpRequest req, IHttpClientFactory f, string path)
+    {
+        using var reader = new StreamReader(req.Body);
+        var body = await reader.ReadToEndAsync();
+
+        return await Relay(await f.AiClient().PutAsync(
+            path,
+            new StringContent(body, Encoding.UTF8, "application/json")));
+    }
 }

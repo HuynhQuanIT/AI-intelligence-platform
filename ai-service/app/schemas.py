@@ -56,3 +56,26 @@ class RoleBody(BaseModel):
 
 class AdminPasswordBody(BaseModel):
     password: str = Field(max_length=200)
+
+
+class PasswordChangeBody(BaseModel):
+    current_password: str = Field(max_length=200)
+    new_password: str = Field(max_length=200)
+
+
+class ChangeEmailBody(BaseModel):
+    email: str = Field(max_length=254)
+
+
+class QuotaBody(BaseModel):
+    # None = dùng mặc định chung; 0 = không giới hạn; số dương = giới hạn riêng mỗi ngày.
+    limit: int | None = Field(default=None, ge=0, le=1_000_000)
+
+
+class GroupBody(BaseModel):
+    name: str = Field(max_length=200)
+    description: str = Field(default="", max_length=500)
+
+
+class IdsBody(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=500)

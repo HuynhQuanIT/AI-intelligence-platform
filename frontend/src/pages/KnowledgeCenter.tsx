@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Download, FileText, Plus, Trash2, Upload } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Download, FileText, Lock, Plus, Save, Trash2, Upload } from 'lucide-react';
 import { api, apiFetch, downloadDocument } from '../api/client';
 import Panel from '../components/Panel';
-import type { DocumentDetail, DocumentRow, PlatformData } from '../types';
+import '../components/extras.css';
+import type { DocumentDetail, DocumentRow, Group, PlatformData } from '../types';
 
 // canEdit: chỉ admin được thêm, tải lên và xóa tài liệu; user thường chỉ xem (server cũng kiểm tra).
 type Props = Pick<PlatformData, 'docs' | 'refresh' | 'setErr'> & { canEdit: boolean };
@@ -16,6 +17,42 @@ export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Prop
   const [fileInputKey, setFileInputKey] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadNote, setUploadNote] = useState('');
+  // Phân quyền theo nhóm (admin): danh sách nhóm, tài liệu đang sửa quyền và các nhóm đã tick.
+  const [allGroups, setAllGroups] = useState<Group[]>([]);
+  const [accessDocId, setAccessDocId] = useState('');
+  const [accessIds, setAccessIds] = useState<Set<string>>(new Set());
+  const [savingAccess, setSavingAccess] = useState(false);
+
+  useEffect(() => {
+    if (!canEdit) return;
+    api('/groups').then(setAllGroups).catch(() => setAllGroups([]));
+  }, [canEdit, docs.length]);
+
+  function editAccess(doc: DocumentRow) {
+    if (accessDocId === doc.id) {
+      setAccessDocId('');
+      return;
+    }
+    setAccessDocId(doc.id);
+    setAccessIds(new Set((doc.groups ?? []).map((g) => g.id)));
+  }
+
+  async function saveAccess() {
+    try {
+      setSavingAccess(true);
+      setErr('');
+      await api(`/documents/${encodeURIComponent(accessDocId)}/groups`, {
+        method: 'PUT',
+        body: JSON.stringify({ ids: [...accessIds] }),
+      });
+      setAccessDocId('');
+      await refresh();
+    } catch (error: any) {
+      setErr('Không lưu được quyền xem: ' + error.message);
+    } finally {
+      setSavingAccess(false);
+    }
+  }
 
   async function addDoc() {
     try {
@@ -190,36 +227,93 @@ export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Prop
       <Panel title={`Indexed documents (${docs.length})`}>
         {docs.length ? (
           docs.map((doc) => (
-            <div className="row" key={doc.id}>
-              <FileText />
+            <div key={doc.id}>
+              <div className="row">
+                <FileText />
 
-              <div>
-                <b>{doc.title}</b>
-                <small>
-                  {doc.filename} · {doc.size_bytes ? `${(doc.size_bytes / 1024).toFixed(1)} KB · ` : ''}
-                  {new Date(doc.created_at).toLocaleString()}
-                </small>
+                <div>
+                  <b>{doc.title}</b>
+                  <small>
+                    {doc.filename} · {doc.size_bytes ? `${(doc.size_bytes / 1024).toFixed(1)} KB · ` : ''}
+                    {new Date(doc.created_at).toLocaleString()}
+                  </small>
+                  {canEdit && (
+                    <div>
+                      {doc.groups?.length ? (
+                        doc.groups.map((g) => <span className="chip" key={g.id}>{g.name}</span>)
+                      ) : (
+                        <span className="chip public">Công khai (mọi người đã đăng nhập)</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <em>{doc.status}</em>
+
+                <button className="secondary" onClick={() => viewDoc(doc.id)} disabled={loadingDoc}>
+                  <FileText size={15} />
+                  Xem
+                </button>
+
+                {doc.has_file && (
+                  <button className="secondary" onClick={() => download(doc)}>
+                    <Download size={15} />
+                    Tải
+                  </button>
+                )}
+
+                {canEdit && (
+                  <button className="secondary" onClick={() => editAccess(doc)}>
+                    <Lock size={15} />
+                    Quyền xem
+                  </button>
+                )}
+
+                {canEdit && (
+                  <button className="secondary" onClick={() => deleteDoc(doc)}>
+                    <Trash2 size={15} />
+                    Xóa
+                  </button>
+                )}
               </div>
 
-              <em>{doc.status}</em>
-
-              <button className="secondary" onClick={() => viewDoc(doc.id)} disabled={loadingDoc}>
-                <FileText size={15} />
-                Xem
-              </button>
-
-              {doc.has_file && (
-                <button className="secondary" onClick={() => download(doc)}>
-                  <Download size={15} />
-                  Tải
-                </button>
-              )}
-
-              {canEdit && (
-                <button className="secondary" onClick={() => deleteDoc(doc)}>
-                  <Trash2 size={15} />
-                  Xóa
-                </button>
+              {canEdit && accessDocId === doc.id && (
+                <div className="doc-groups">
+                  <small>
+                    Không chọn nhóm nào = công khai. Chọn nhóm = chỉ thành viên các nhóm đó (và admin) thấy tài liệu,
+                    kể cả khi chat và khi agent dùng công cụ.
+                  </small>
+                  {allGroups.length ? (
+                    <div className="checklist">
+                      {allGroups.map((g) => (
+                        <label key={g.id}>
+                          <input
+                            type="checkbox"
+                            checked={accessIds.has(g.id)}
+                            onChange={() =>
+                              setAccessIds((current) => {
+                                const copy = new Set(current);
+                                if (copy.has(g.id)) copy.delete(g.id);
+                                else copy.add(g.id);
+                                return copy;
+                              })
+                            }
+                          />
+                          <span className="grow">{g.name}</span> <small>{g.member_count} người</small>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">Chưa có nhóm nào. Tạo nhóm ở trang Groups.</p>
+                  )}
+                  <div className="inline-form">
+                    <button className="primary" onClick={saveAccess} disabled={savingAccess}>
+                      <Save size={15} />
+                      Lưu quyền xem
+                    </button>
+                    <button className="secondary" onClick={() => setAccessDocId('')}>Hủy</button>
+                  </div>
+                </div>
               )}
             </div>
           ))

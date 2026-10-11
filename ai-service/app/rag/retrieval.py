@@ -4,13 +4,15 @@ import os
 from functools import lru_cache
 
 from ..core.db import query
+from .access import PUBLIC_ONLY, visible_sql
 from . import embeddings
 from .text import keywords, normalize_text, words
 
 logger = logging.getLogger(__name__)
 
 
-def retrieve_lexical(question, limit=4):
+def retrieve_lexical(question, limit=4, viewer=PUBLIC_ONLY):
+    cond, params = visible_sql(viewer)
     rows = query(
         """
         SELECT
@@ -20,8 +22,9 @@ def retrieve_lexical(question, limit=4):
             c.chunk_index
         FROM document_chunks c
         JOIN documents d ON d.id = c.document_id
-        WHERE d.status = 'processed'
-        """
+        WHERE d.status = 'processed' AND """ + cond + """
+        """,
+        params,
     )
 
     question_normalized = normalize_text(question)
@@ -108,8 +111,9 @@ def _query_vector(question: str) -> str:
     )
 
 
-def retrieve_vector(question, limit):
+def retrieve_vector(question, limit, viewer=PUBLIC_ONLY):
     vec = _query_vector(question)
+    cond, params = visible_sql(viewer)
 
     rows = query(
         """
@@ -121,11 +125,11 @@ def retrieve_vector(question, limit):
             1 - (c.embedding <=> %s::vector) AS similarity
         FROM document_chunks c
         JOIN documents d ON d.id = c.document_id
-        WHERE d.status = 'processed' AND c.embedding IS NOT NULL
+        WHERE d.status = 'processed' AND c.embedding IS NOT NULL AND """ + cond + """
         ORDER BY c.embedding <=> %s::vector
         LIMIT %s
         """,
-        (vec, vec, limit),
+        (vec, *params, vec, limit),
     )
 
     return [
@@ -155,19 +159,19 @@ def _describe_error(exc) -> str:
     return type(exc).__name__ + (f" {code}" if code else "")
 
 
-def retrieve_ex(question, limit=4):
+def retrieve_ex(question, limit=4, viewer=PUBLIC_ONLY):
     """
     Hybrid: từ khóa + vector, gộp bằng Reciprocal Rank Fusion có trọng số.
     Trả (kết quả, info). info cho biết đã dùng cách nào và vì sao quay về từ khóa,
     để trace không che giấu việc vector search bị lỗi.
     """
-    lexical = retrieve_lexical(question, limit * 3)
+    lexical = retrieve_lexical(question, limit * 3, viewer)
 
     if not embeddings.enabled():
         return lexical[:limit], {"mode": "keyword", "reason": "embeddings disabled"}
 
     try:
-        semantic = near_top(retrieve_vector(question, limit * 3))
+        semantic = near_top(retrieve_vector(question, limit * 3, viewer))
     except Exception as exc:
         logger.exception("Vector search failed; falling back to lexical retrieval")
         return lexical[:limit], {
@@ -207,5 +211,5 @@ def retrieve_ex(question, limit=4):
     return ranked, {"mode": "hybrid", "reason": ""}
 
 
-def retrieve(question, limit=4):
-    return retrieve_ex(question, limit)[0]
+def retrieve(question, limit=4, viewer=PUBLIC_ONLY):
+    return retrieve_ex(question, limit, viewer)[0]

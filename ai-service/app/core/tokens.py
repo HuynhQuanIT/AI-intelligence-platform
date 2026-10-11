@@ -75,3 +75,14 @@ def otp_digest(email: str, purpose: str, code: str) -> str:
 
 def otp_matches(email: str, purpose: str, code: str, stored_digest: str) -> bool:
     return hmac.compare_digest(otp_digest(email, purpose, code), stored_digest)
+
+
+# --------------------------- refresh token ---------------------------
+
+def generate_refresh_token() -> str:
+    """Chuỗi ngẫu nhiên không đoán được (không phải JWT). Chỉ lưu bản băm SHA-256 trong database."""
+    return secrets.token_urlsafe(48)
+
+
+def refresh_digest(token: str) -> str:
+    return hashlib.sha256(("refresh:" + token).encode("utf-8")).hexdigest()

@@ -12,6 +12,8 @@ import ModelRouting from './pages/ModelRouting';
 import Monitoring from './pages/Monitoring';
 import Playground from './pages/Playground';
 import SecurityCenter from './pages/SecurityCenter';
+import Account from './pages/Account';
+import GroupManagement from './pages/GroupManagement';
 import UserManagement from './pages/UserManagement';
 import type { Page, User } from './types';
 
@@ -78,6 +80,8 @@ export default function Workspace({ user }: { user: User }) {
             <SecurityCenter events={events} refresh={refresh} setErr={setErr} />
           )}
           {page === 'User Management' && isAdmin && <UserManagement setErr={setErr} />}
+          {page === 'Groups' && isAdmin && <GroupManagement setErr={setErr} refresh={refresh} />}
+          {page === 'My Account' && <Account />}
         </article>
       </main>
     </div>

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 
 from ..core.db import query
 from ..schemas import Eval
+from ..services import auth
 from .deps import require_admin
 
 router = APIRouter(tags=["monitoring"], dependencies=[Depends(require_admin)])
@@ -45,16 +46,18 @@ def metrics():
     recent = query(
         """
         SELECT
-            request_id,
-            model,
-            input_tokens,
-            output_tokens,
-            cost_usd::float,
-            latency_ms,
-            status,
-            created_at
-        FROM usage_logs
-        ORDER BY id DESC
+            l.request_id,
+            l.model,
+            l.input_tokens,
+            l.output_tokens,
+            l.cost_usd::float,
+            l.latency_ms,
+            l.status,
+            l.created_at,
+            u.email AS user_email
+        FROM usage_logs l
+        LEFT JOIN users u ON u.id = l.user_id
+        ORDER BY l.id DESC
         LIMIT 20
         """
     )
@@ -63,6 +66,12 @@ def metrics():
         "totals": totals,
         "recent": recent,
     }
+
+
+@router.get("/metrics/users")
+def metrics_by_user():
+    """Thống kê theo từng người dùng: số request, token, chi phí, bị chặn, lỗi, sự kiện bảo mật, hạn mức hôm nay."""
+    return auth.usage_by_user()
 
 
 @router.get("/traces")

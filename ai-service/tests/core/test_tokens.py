@@ -10,7 +10,7 @@ def test_access_token_roundtrip():
     token, seconds = tokens.create_access_token("user-1", "admin", 3)
     payload = tokens.decode_access_token(token)
     assert (payload["sub"], payload["role"], payload["tv"]) == ("user-1", "admin", 3)
-    assert seconds == 60 * 60
+    assert seconds == 15 * 60
 
 
 def test_tampered_or_foreign_token_is_rejected():
