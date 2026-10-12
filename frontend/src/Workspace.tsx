@@ -15,6 +15,7 @@ import Playground from './pages/Playground';
 import SecurityCenter from './pages/SecurityCenter';
 import Account from './pages/Account';
 import GroupManagement from './pages/GroupManagement';
+import DocumentSearch from './pages/DocumentSearch';
 import UserManagement from './pages/UserManagement';
 import type { Page, User } from './types';
 
@@ -24,6 +25,12 @@ export default function Workspace({ user }: { user: User }) {
   const [page, setPage] = useState<Page>(homePageFor(user.role));
   const { metrics, agents, docs, traces, events, err, setErr, refresh, refreshDocs } = usePlatformData(user.role);
   const isAdmin = user.role === 'admin';
+  // Mở một tài liệu (và đoạn cụ thể) trong Knowledge Center, từ kết quả tìm kiếm hoặc nguồn trích dẫn của chatbot.
+  const [focus, setFocus] = useState<{ documentId: string; chunkIndex?: number | null } | null>(null);
+  const openDocument = (documentId: string, chunkIndex?: number | null) => {
+    setFocus({ documentId, chunkIndex });
+    setPage('Knowledge Center');
+  };
 
   // Đổi vai trò hoặc đăng nhập lại bằng người khác: về trang mặc định nếu trang hiện tại không còn được phép.
   useEffect(() => {
@@ -81,9 +88,13 @@ export default function Workspace({ user }: { user: User }) {
           )}
           {page === 'Agent Studio' && isAdmin && <AgentStudio agents={agents} />}
           {page === 'Knowledge Center' && (
-            <KnowledgeCenter docs={docs} refresh={refresh} refreshDocs={refreshDocs} setErr={setErr} canEdit={isAdmin} />
+            <KnowledgeCenter docs={docs} refresh={refresh} refreshDocs={refreshDocs} setErr={setErr} canEdit={isAdmin}
+              focus={focus} onFocusDone={() => setFocus(null)} />
           )}
-          {page === 'AI Playground' && <Playground refresh={refresh} setErr={setErr} />}
+          {page === 'Document Search' && (
+            <DocumentSearch isAdmin={isAdmin} setErr={setErr} onOpenDocument={openDocument} />
+          )}
+          {page === 'AI Playground' && <Playground refresh={refresh} setErr={setErr} onOpenDocument={openDocument} />}
           {page === 'Model Routing' && isAdmin && <ModelRouting />}
           {page === 'Cost Optimization' && isAdmin && <CostOptimization metrics={metrics} />}
           {page === 'LLMOps Monitoring' && isAdmin && <Monitoring traces={traces} />}

@@ -262,3 +262,26 @@ test('upload bất đồng bộ: trạng thái tự cập nhật, file hỏng b�
   await bad.getByRole('button', { name: 'Thử lại' }).click();
   await expect(bad.locator('.status-badge.failed')).toBeVisible({ timeout: 20000 }); // file hỏng nên vẫn lỗi, nhưng đã chạy lại
 });
+
+test('tìm kiếm tài liệu theo nội dung, tô sáng từ khóa, bấm kết quả mở đúng đoạn', async ({ browser }) => {
+  const { page: admin } = await newSession(browser);
+  await loginAs(admin, ADMIN_EMAIL, ADMIN_PASSWORD);
+  const token = 'tìmkiếm' + Date.now().toString(36);
+  const title = 'Tài liệu tìm kiếm ' + token;
+  await openPage(admin, 'Knowledge Center');
+  await admin.getByPlaceholder('Product handbook').fill(title);
+  await admin.getByPlaceholder('Paste document text...').fill(`Mở đầu. Nội dung bảo quản mẫu có từ khóa ${token} nằm ở giữa đoạn.`);
+  await admin.getByRole('button', { name: 'Index document' }).click();
+  await expect(admin.getByText(title, { exact: true })).toBeVisible();
+
+  await openPage(admin, 'Document Search');
+  await admin.getByLabel('Từ khóa tìm kiếm').fill(token);
+  await admin.getByRole('button', { name: 'Từ khóa', exact: true }).click();
+  await admin.getByRole('button', { name: 'Tìm', exact: true }).click();
+  const hit = admin.locator('.search-result', { hasText: title });
+  await expect(hit).toBeVisible();
+  await expect(hit.locator('mark')).toHaveText(token);
+  await hit.getByRole('button', { name: /^Chunk 0/ }).click();
+
+  await expect(admin.locator('.document-chunk.focused')).toContainText(token);
+});

@@ -4,6 +4,7 @@ export type Page =
   | 'Dashboard'
   | 'Agent Studio'
   | 'Knowledge Center'
+  | 'Document Search'
   | 'AI Playground'
   | 'Model Routing'
   | 'Cost Optimization'
@@ -186,4 +187,27 @@ export type PlatformData = {
   setErr: (message: string) => void;
   refresh: () => Promise<void>;
   refreshDocs: () => Promise<void>; // nạp riêng danh sách tài liệu (nhẹ), dùng khi chờ xử lý nền
+};
+
+export type SearchSnippet = { text: string; marks: [number, number][]; before: boolean; after: boolean };
+
+export type SearchResult = {
+  document_id: string;
+  title: string;
+  filename?: string | null;
+  score: number;
+  relevance: number; // 0..1, tương đối so với kết quả tốt nhất
+  scope?: 'public' | 'group';
+  groups?: GroupRef[];
+  matches: { chunk_index: number; similarity?: number | null; snippet: SearchSnippet }[];
+};
+
+export type SearchResponse = {
+  query: string;
+  mode: string;
+  mode_used: string; // chế độ thực sự đã dùng (có thể khác mode nếu ngữ nghĩa không dùng được)
+  note: string;
+  took_ms: number;
+  total: number;
+  results: SearchResult[];
 };

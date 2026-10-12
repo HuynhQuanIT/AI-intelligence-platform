@@ -14,9 +14,14 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // canEdit: chỉ admin được thêm, tải lên và xóa tài liệu; user thường chỉ xem (server cũng kiểm tra).
-type Props = Pick<PlatformData, 'docs' | 'refresh' | 'refreshDocs' | 'setErr'> & { canEdit: boolean };
+type Props = Pick<PlatformData, 'docs' | 'refresh' | 'refreshDocs' | 'setErr'> & {
+  canEdit: boolean;
+  // Mở sẵn một tài liệu và cuộn tới đúng đoạn (từ kết quả tìm kiếm / nguồn trích dẫn).
+  focus?: { documentId: string; chunkIndex?: number | null } | null;
+  onFocusDone?: () => void;
+};
 
-export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, canEdit }: Props) {
+export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, canEdit, focus, onFocusDone }: Props) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<DocumentDetail | null>(null);
@@ -34,6 +39,19 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
   const [scopeFilter, setScopeFilter] = useState<'all' | 'mine' | 'public'>('all');
   const shownDocs = canEdit ? docs : docs.filter((d) =>
     scopeFilter === 'all' ? true : scopeFilter === 'mine' ? d.scope === 'group' : d.scope === 'public');
+
+  // Được mở từ nơi khác: nạp tài liệu rồi cuộn tới đoạn cần xem và tô nổi bật.
+  const [focusChunk, setFocusChunk] = useState<number | null>(null);
+  useEffect(() => {
+    if (!focus) return;
+    setFocusChunk(focus.chunkIndex ?? null);
+    viewDoc(focus.documentId).finally(() => onFocusDone?.());
+  }, [focus]);
+  useEffect(() => {
+    if (!selectedDoc) return;
+    const el = focusChunk != null ? document.getElementById(`chunk-${focusChunk}`) : null;
+    (el ?? document.getElementById('document-viewer'))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [selectedDoc, focusChunk]);
 
   // Còn tài liệu đang xử lý nền: tự hỏi lại mỗi 3 giây cho tới khi xong (processed/failed).
   const hasProcessing = docs.some((d) => d.status === 'processing');
@@ -373,6 +391,7 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
 
       {selectedDoc && !loadingDoc && (
         <Panel title={`Document: ${selectedDoc.title}`}>
+          <span id="document-viewer" />
           <div className="row">
             <div>
               <b>{selectedDoc.filename}</b>
@@ -383,7 +402,7 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
               </small>
             </div>
 
-            <button className="secondary" onClick={() => setSelectedDoc(null)}>
+            <button className="secondary" onClick={() => { setSelectedDoc(null); setFocusChunk(null); }}>
               Đóng
             </button>
           </div>
@@ -391,7 +410,8 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
           <div className="document-content">
             {selectedDoc.chunks?.length ? (
               selectedDoc.chunks.map((chunk) => (
-                <section key={chunk.chunk_index} className="document-chunk">
+                <section key={chunk.chunk_index} id={`chunk-${chunk.chunk_index}`}
+                  className={chunk.chunk_index === focusChunk ? 'document-chunk focused' : 'document-chunk'}>
                   <h4>Chunk {chunk.chunk_index}</h4>
 
                   <pre

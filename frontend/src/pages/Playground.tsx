@@ -6,10 +6,12 @@ import { AccessLine } from '../components/AccessInfo';
 import { useChat } from '../hooks/useChat';
 import type { PlatformData, SourceRef } from '../types';
 
-type Props = Pick<PlatformData, 'refresh' | 'setErr'>;
+type Props = Pick<PlatformData, 'refresh' | 'setErr'> & {
+  onOpenDocument: (documentId: string, chunkIndex?: number | null) => void;
+};
 
 // Nguồn tài liệu đã dùng để trả lời, gộp theo tài liệu, kèm nhãn Công khai / tên nhóm.
-function Sources({ sources }: { sources?: SourceRef[] }) {
+function Sources({ sources, onOpen }: { sources?: SourceRef[]; onOpen: Props['onOpenDocument'] }) {
   if (!sources?.length) return null;
   const byDoc = new Map<string, SourceRef & { chunks: number[] }>();
   for (const s of sources) {
@@ -24,8 +26,22 @@ function Sources({ sources }: { sources?: SourceRef[] }) {
       {[...byDoc.entries()].map(([key, s]) => (
         <div className="source" key={key} title={(s.snippet || s.content || '').slice(0, 200)}>
           <FileText size={14} />
-          <b>{s.title || 'Tài liệu'}</b>
-          {s.chunks.length > 0 && <span className="muted">chunk {s.chunks.sort((a, b) => a - b).join(', ')}</span>}
+          {s.document_id ? (
+            <button className="link-title" title="Mở đúng đoạn trong Knowledge Center"
+              onClick={() => onOpen(s.document_id as string, [...s.chunks].sort((a, b) => a - b)[0])}>
+              {s.title || 'Tài liệu'}
+            </button>
+          ) : <b>{s.title || 'Tài liệu'}</b>}
+          {s.chunks.length > 0 && (
+            <span className="muted">
+              chunk{' '}
+              {[...s.chunks].sort((a, b) => a - b).map((c, i) => (
+                <button key={c} className="link-chunk" onClick={() => onOpen(s.document_id as string, c)}>
+                  {i > 0 ? ', ' : ''}{c}
+                </button>
+              ))}
+            </span>
+          )}
           {s.scope === 'group' ? (
             s.groups?.length
               ? s.groups.map((g) => <span className="chip" key={g.id}>{g.name}</span>)
@@ -39,7 +55,7 @@ function Sources({ sources }: { sources?: SourceRef[] }) {
   );
 }
 
-export default function Playground({ refresh, setErr }: Props) {
+export default function Playground({ refresh, setErr, onOpenDocument }: Props) {
   const { user } = useAuth();
   const {
     q, setQ, chat, useRag, setUseRag, sending, conversations, activeId, liveStep, messagesRef,
@@ -125,7 +141,7 @@ export default function Playground({ refresh, setErr }: Props) {
                 <p className="muted">Đang xử lý{liveStep ? ': ' + liveStep : ''}…</p>
               )}
 
-              {message.role === 'ai' && <Sources sources={message.meta?.sources} />}
+              {message.role === 'ai' && <Sources sources={message.meta?.sources} onOpen={onOpenDocument} />}
 
               {message.role === 'ai' && message.meta && message.meta.model !== undefined && (
                 <small className="message-meta">
