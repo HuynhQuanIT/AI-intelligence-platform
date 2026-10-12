@@ -4,7 +4,7 @@ import logging
 
 from ..rag.access import PUBLIC_ONLY
 from ..schemas import Chat
-from . import conversations
+from . import conversations, groups
 from .telemetry import estimate_cost, safe_log, safe_security_event
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,9 @@ def source_summary(sources: list) -> list:
             "document_id": x.get("document_id"),
             "chunk_index": x.get("chunk_index"),
             "similarity": x.get("similarity"),
+            "snippet": (x.get("content") or "")[:200],
+            "scope": x.get("scope"),
+            "groups": x.get("groups", []),
         }
         for x in sources
     ]
@@ -80,6 +83,12 @@ async def finish_chat(request_id, provider, state, latency_ms, conversation_id, 
             request_id, state["blocked"], state["security_matches"], user_id
         )
 
+    try:  # nhãn nhóm chỉ để hiển thị: lỗi ở đây không được làm hỏng câu trả lời
+        sources = await asyncio.to_thread(groups.label_sources, state.get("viewer"), state["context"])
+    except Exception:
+        logger.exception("Không gắn được nhãn nhóm cho nguồn trích dẫn")
+        sources = state["context"]
+
     payload = {
         "request_id": request_id,
         "conversation_id": conversation_id,
@@ -90,7 +99,7 @@ async def finish_chat(request_id, provider, state, latency_ms, conversation_id, 
         "cost_usd": round(cost, 6),
         "latency_ms": latency_ms,
         "blocked": state["blocked"],
-        "sources": state["context"],
+        "sources": sources,
         "trace": state["trace"],
     }
 
@@ -102,7 +111,7 @@ async def finish_chat(request_id, provider, state, latency_ms, conversation_id, 
             "cost_usd": payload["cost_usd"],
             "latency_ms": latency_ms,
             "blocked": payload["blocked"],
-            "sources": source_summary(state["context"]),
+            "sources": source_summary(sources),
             "trace": state["trace"],
         }
         try:

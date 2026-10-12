@@ -67,7 +67,7 @@ def test_file_download_respects_groups(client, setup):
     ho, co, _ = setup["outsider"]
     files = {"file": ("bi-mat.txt", f"noi dung rieng {uuid.uuid4()}".encode(), "text/plain")}
     up = client.post("/documents/upload", files=files)
-    assert up.status_code == 200, up.text
+    assert up.status_code == 202, up.text
     did = up.json()["id"]
     client.put(f"/documents/{did}/groups", json={"ids": [setup["gid"]]})
     assert co.get(f"/documents/{did}/file", headers=ho).status_code == 404
@@ -222,3 +222,30 @@ def test_member_added_at_is_kept_when_saving_again(client, setup):
     client.put(f"/groups/{gid}/members", json={"ids": [uid]})
     again = query("SELECT added_at FROM user_groups WHERE group_id=%s AND user_id=%s", (gid, uid))[0]["added_at"]
     assert first == again
+
+
+# ---- nguồn trích dẫn có nhãn nhóm ----
+
+def ask(c, h, tag):
+    r = c.post("/chat", json={"message": f"zebrafish{tag} nội dung", "use_rag": True}, headers=h)
+    assert r.status_code == 200, r.text
+    return {s["document_id"]: s for s in r.json()["sources"]}
+
+
+def test_chat_sources_carry_group_labels(client, setup):
+    hm, cm, _ = setup["member"]
+    ho, co, _ = setup["outsider"]
+    other = group(client)
+    client.put(f"/documents/{setup['sec']}/groups", json={"ids": [setup["gid"], other]})
+    tag = setup["tag"]
+
+    member = ask(cm, hm, tag)
+    assert member[setup["pub"]]["scope"] == "public" and member[setup["pub"]]["groups"] == []
+    sec = member[setup["sec"]]
+    assert sec["scope"] == "group" and [g["id"] for g in sec["groups"]] == [setup["gid"]]  # chỉ nhóm của mình
+
+    assert setup["sec"] not in ask(co, ho, tag)                                  # người ngoài không thấy nguồn nhóm
+
+    admin_sec = {s["document_id"]: s for s in client.post(
+        "/chat", json={"message": f"zebrafish{tag} nội dung", "use_rag": True}).json()["sources"]}[setup["sec"]]
+    assert {g["id"] for g in admin_sec["groups"]} == {setup["gid"], other}      # admin thấy đủ nhóm

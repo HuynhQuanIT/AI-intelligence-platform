@@ -39,9 +39,17 @@ export function usePlatformData(role: Role): PlatformData & { err: string } {
     }
   }
 
+  async function refreshDocs() {
+    try {
+      setDocs(await api('/documents'));
+    } catch {
+      // lỗi mạng thoáng qua khi đang chờ: lần hỏi lại sau sẽ thử tiếp
+    }
+  }
+
   useEffect(() => {
     refresh();
   }, [role]);
 
-  return { metrics, agents, docs, traces, events, err, setErr, refresh };
+  return { metrics, agents, docs, traces, events, err, setErr, refresh, refreshDocs };
 }

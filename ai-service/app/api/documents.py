@@ -4,7 +4,7 @@ import logging
 import uuid
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Response, UploadFile
 
 from ..agents.security import scan_text
 from ..rag.access import viewer_of
@@ -14,12 +14,15 @@ from ..rag.documents import (
     DuplicateDocument,
     NoOriginalFile,
     add_document,
-    add_uploaded_document,
     delete_document,
     documents,
+    fail_stale,
     get_document,
     get_document_file,
+    process_document,
     reindex_missing,
+    retry_document,
+    start_upload,
 )
 from ..rag.extract import ALLOWED_EXTENSIONS, ExtractError, extension, extract_text
 from ..schemas import Doc, IdsBody
@@ -43,11 +46,14 @@ def create_doc(b: Doc):
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
-@router.post("/documents/upload", dependencies=admin_only)
+@router.post("/documents/upload", dependencies=admin_only, status_code=202)
 async def upload_document(
+    background: BackgroundTasks,
     file: UploadFile = File(...),
     title: str | None = Form(default=None, max_length=250),
 ):
+    """Nhận file rồi trả 202 ngay (status='processing'); trích văn bản/chunk/embedding chạy nền.
+    Giao diện hỏi lại GET /documents cho tới khi status là processed hoặc failed."""
     filename = file.filename or ""
     ext = extension(filename)
     if ext not in ALLOWED_EXTENSIONS:
@@ -63,14 +69,7 @@ async def upload_document(
         raise HTTPException(status_code=422, detail="File rỗng.")
 
     try:
-        text = await asyncio.to_thread(extract_text, filename, data)
-        result = await asyncio.to_thread(
-            add_uploaded_document, filename, title, data, text
-        )
-    except ExtractError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    except DocumentTooLarge as exc:
-        raise HTTPException(status_code=413, detail=str(exc))
+        result = await asyncio.to_thread(start_upload, filename, title, data)
     except DuplicateDocument as exc:
         raise HTTPException(
             status_code=409,
@@ -80,16 +79,26 @@ async def upload_document(
         logger.exception("Document upload failed: %s", filename)
         raise HTTPException(
             status_code=503,
-            detail="Không lưu được tài liệu (MinIO hoặc database lỗi). Xem log ai-service.",
+            detail="Không lưu được tài liệu (kho lưu trữ hoặc database lỗi). Xem log ai-service.",
         )
 
-    # Không chặn việc lưu: lọc thật sự nằm ở Analysis Agent lúc truy xuất.
-    result["security_matches"] = scan_text(text)
+    background.add_task(process_document, result["id"])  # hàm đồng bộ: Starlette chạy trong threadpool
     return result
+
+
+@router.post("/documents/{document_id}/retry", dependencies=admin_only, status_code=202)
+def retry_doc(document_id: str, background: BackgroundTasks):
+    document_id = valid_document_id(document_id)
+    if not retry_document(document_id):
+        raise HTTPException(status_code=409, detail="Chỉ thử lại được tài liệu đang ở trạng thái failed.")
+    background.add_task(process_document, document_id)
+    return {"id": document_id, "status": "processing"}
 
 
 @router.get("/documents")
 def get_docs(user: dict = Depends(current_user)):
+    if user["role"] == "admin":
+        fail_stale()  # tài liệu treo quá lâu ở 'processing' thì chuyển failed để admin thử lại
     rows = documents(viewer_of(user))
     if user["role"] == "admin":
         # Admin thấy mọi nhóm của tài liệu.

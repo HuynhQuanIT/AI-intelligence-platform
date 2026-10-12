@@ -118,7 +118,8 @@ def test_upload_validation_and_duplicate(client):
 
     content = f"Tệp thử nghiệm {uuid.uuid4()} dùng để kiểm tra upload.".encode()
     first = client.post("/documents/upload", files={"file": ("note.txt", content, "text/plain")})
-    assert first.status_code == 200, first.text
+    assert first.status_code == 202, first.text
+    assert first.json()["status"] == "processing"  # trả ngay; xử lý chạy nền (TestClient chạy xong nền trước khi trả)
     did = first.json()["id"]
     try:
         again = client.post("/documents/upload", files={"file": ("note-copy.txt", content, "text/plain")})

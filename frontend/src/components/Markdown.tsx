@@ -21,6 +21,38 @@ function inline(text: string): ReactNode[] {
   return out;
 }
 
+type Item = { indent: number; ordered: boolean; num: number; text: string };
+
+const LIST_RE = /^(\s*)(?:([-*•])|(\d+)[.)])\s+(.*)$/;
+
+function parseItem(line: string): Item | null {
+  const m = LIST_RE.exec(line);
+  if (!m) return null;
+  return { indent: m[1].replace(/\t/g, '    ').length, ordered: m[3] !== undefined, num: Number(m[3] ?? 1), text: m[4] };
+}
+
+// Dựng danh sách lồng nhau theo mức thụt lề. Mục đánh số giữ đúng số thứ tự (start) nên
+// "1. … gạch đầu dòng … 2. …" không bị đánh số lại từ 1 sau mỗi cụm gạch đầu dòng.
+function renderList(items: Item[], from: number, keyBase: string): [ReactNode, number] {
+  const base = items[from].indent;
+  const ordered = items[from].ordered;
+  const lis: ReactNode[] = [];
+  let pos = from;
+  while (pos < items.length && items[pos].indent >= base) {
+    if (items[pos].indent === base && items[pos].ordered !== ordered) break;
+    const it = items[pos++];
+    let nested: ReactNode = null;
+    if (pos < items.length && items[pos].indent > base) {
+      [nested, pos] = renderList(items, pos, `${keyBase}-${lis.length}`);
+    }
+    lis.push(<li key={lis.length}>{inline(it.text)}{nested}</li>);
+  }
+  const list = ordered
+    ? <ol key={keyBase} start={items[from].num}>{lis}</ol>
+    : <ul key={keyBase}>{lis}</ul>;
+  return [list, pos];
+}
+
 export default function Markdown({ text }: { text: string }) {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const blocks: ReactNode[] = [];
@@ -52,14 +84,31 @@ export default function Markdown({ text }: { text: string }) {
     }
 
     if (isBullet(line) || isNumber(line)) {
-      const ordered = isNumber(line);
-      const items: string[] = [];
-      while (i < lines.length && (ordered ? isNumber(lines[i]) : isBullet(lines[i]))) {
-        items.push(lines[i].replace(/^\s*(?:[-*•]|\d+[.)])\s+/, ''));
-        i++;
+      // Gom cả khối danh sách, cho phép dòng trống xen giữa nếu sau đó vẫn là mục danh sách.
+      const items: Item[] = [];
+      while (i < lines.length) {
+        const item = parseItem(lines[i]);
+        if (item) { items.push(item); i++; continue; }
+        if (!lines[i].trim()) {
+          let j = i;
+          while (j < lines.length && !lines[j].trim()) j++;
+          if (j < lines.length && parseItem(lines[j])) { i = j; continue; }
+        }
+        break;
       }
-      const li = items.map((t, n) => <li key={n}>{inline(t)}</li>);
-      blocks.push(ordered ? <ol key={key++}>{li}</ol> : <ul key={key++}>{li}</ul>);
+      // Model hay viết gạch đầu dòng KHÔNG thụt lề ngay dưới mục đánh số: coi đó là mục con của số đó.
+      let orderedIndent = -1;
+      for (const it of items) {
+        if (it.ordered) orderedIndent = it.indent;
+        else if (orderedIndent >= 0 && it.indent === orderedIndent) it.indent += 2;
+        else if (it.indent < orderedIndent) orderedIndent = -1;
+      }
+      let pos = 0;
+      while (pos < items.length) {
+        const [node, next] = renderList(items, pos, `l${key++}`);
+        blocks.push(node);
+        pos = next;
+      }
       continue;
     }
 

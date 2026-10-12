@@ -67,3 +67,15 @@ button.danger:disabled{opacity:.5;cursor:not-allowed}
 .scope-filter{display:flex;gap:8px;margin-bottom:10px}
 .scope-filter .active{background:#1d4b7a;border-color:#3b8ad4}
 .workspace .my-groups{white-space:normal}
+.status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;font-size:12px;font-style:normal;white-space:nowrap}
+.status-badge.processing{background:#3a2f12;color:#f3d27a;border:1px solid #6b5a22}
+.status-badge.processed{background:#12301f;color:#8fe3b3;border:1px solid #235a3b}
+.status-badge.failed{background:#3a1a1a;color:#ff9b9b;border:1px solid #6b2a2a}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.doc-error{margin:4px 0;color:#ff9b9b;font-size:13px}
+.sources{margin-top:10px;padding-top:8px;border-top:1px solid #243148;display:grid;gap:6px}
+.sources>small{color:#9fb3d1;text-transform:uppercase;letter-spacing:.05em;font-size:11px}
+.source{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px}
+.source b{font-weight:600}
+.scope-filter button.active{background:#1d4b7a}

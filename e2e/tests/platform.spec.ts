@@ -137,6 +137,14 @@ test('nhóm và phân quyền tài liệu: người ngoài nhóm không thấy, 
   await openPage(user, 'Knowledge Center');
   await expect(user.getByText(docTitle, { exact: true })).toBeVisible();
   await expect(user.locator('.row', { hasText: docTitle }).locator('.chip', { hasText: groupName })).toBeVisible();
+  // Chatbot trích dẫn nguồn kèm nhãn nhóm của tài liệu.
+  await openPage(user, 'AI Playground');
+  await user.getByPlaceholder('Message your AI assistant...').fill('nội bộ dành cho nhóm được cấp quyền');
+  await user.locator('.compose button.primary').click();
+  const sources = user.locator('.sources .source', { hasText: docTitle });
+  await expect(sources).toBeVisible({ timeout: 20000 });
+  await expect(sources.locator('.chip', { hasText: groupName })).toBeVisible();
+  await openPage(user, 'Knowledge Center');
   await user.getByRole('button', { name: 'Của nhóm tôi' }).click();
   await expect(user.getByText(docTitle, { exact: true })).toBeVisible();
   await user.getByRole('button', { name: 'Công khai', exact: true }).click();
@@ -226,4 +234,31 @@ test('admin đổi email rồi xóa tài khoản', async ({ browser }) => {
 
   await login(user, renamed, PASSWORD);
   await expect(user.locator('.error')).toContainText('Email hoặc mật khẩu không đúng');
+});
+
+
+test('upload bất đồng bộ: trạng thái tự cập nhật, file hỏng báo lỗi và thử lại được', async ({ browser }) => {
+  const { page: admin } = await newSession(browser);
+  await loginAs(admin, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await openPage(admin, 'Knowledge Center');
+
+  const stamp = Date.now().toString(36);
+  await admin.locator('input[type=file]').setInputFiles({
+    name: `tai-lieu-${stamp}.txt`, mimeType: 'text/plain',
+    buffer: Buffer.from(`Tài liệu upload bất đồng bộ ${stamp}. `.repeat(60)),
+  });
+  await admin.getByRole('button', { name: /Upload/ }).click();
+  await expect(admin.getByText('đang xử lý nền')).toBeVisible();
+  const ok = admin.locator('.row', { hasText: `tai-lieu-${stamp}` });
+  await expect(ok.locator('.status-badge.processed')).toBeVisible({ timeout: 20000 }); // tự cập nhật, không cần reload
+
+  await admin.locator('input[type=file]').setInputFiles({
+    name: `hong-${stamp}.pdf`, mimeType: 'application/pdf', buffer: Buffer.from(`%PDF-1.4 không phải pdf thật ${stamp}`),
+  });
+  await admin.getByRole('button', { name: /Upload/ }).click();
+  const bad = admin.locator('.row', { hasText: `hong-${stamp}` });
+  await expect(bad.locator('.status-badge.failed')).toBeVisible({ timeout: 20000 });
+  await expect(bad.locator('.doc-error')).not.toBeEmpty();
+  await bad.getByRole('button', { name: 'Thử lại' }).click();
+  await expect(bad.locator('.status-badge.failed')).toBeVisible({ timeout: 20000 }); // file hỏng nên vẫn lỗi, nhưng đã chạy lại
 });

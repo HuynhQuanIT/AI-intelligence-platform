@@ -94,8 +94,34 @@ def add_document(title, content):
     return _result(did, title, title, chunks, vectors)
 
 
-def add_uploaded_document(filename, title, data, text):
-    """Lưu file gốc vào MinIO, chia chunk, embed rồi ghi DB (đồng bộ, gọi trong thread)."""
+def ensure_schema() -> None:
+    """Cột error cho tài liệu xử lý lỗi; và dọn các tài liệu kẹt 'processing' do lần chạy trước bị dừng."""
+    with transaction() as cur:
+        cur.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS error TEXT")
+    fail_stale(STARTUP_GRACE_SECONDS)
+
+
+STARTUP_GRACE_SECONDS = 120   # lúc khởi động: tài liệu 'processing' quá 2 phút chắc chắn đã mất tiến trình xử lý
+STALE_SECONDS = 15 * 60       # đang chạy: quá 15 phút coi như treo
+
+
+def fail_stale(older_than_seconds: int = STALE_SECONDS) -> int:
+    rows = query(
+        "UPDATE documents SET status = 'failed', "
+        "error = 'Quá trình xử lý bị gián đoạn (máy chủ khởi động lại hoặc quá thời gian). Hãy bấm Thử lại.' "
+        "WHERE status = 'processing' AND created_at < NOW() - make_interval(secs => %s) RETURNING id",
+        (older_than_seconds,),
+    )
+    return len(rows or [])
+
+
+def _display_name(filename: str) -> str:
+    return filename.replace("\\", "/").split("/")[-1][:255] or "document"
+
+
+def start_upload(filename, title, data):
+    """Bước NHANH (chạy trong request): kiểm tra trùng, lưu file gốc, tạo dòng status='processing'.
+    Việc nặng (trích văn bản, chunk, embedding) làm ở process_document, chạy nền."""
     digest = hashlib.sha256(data).hexdigest()
     existing = query(
         "SELECT id::text AS id, title FROM documents WHERE content_hash = %s LIMIT 1",
@@ -104,37 +130,70 @@ def add_uploaded_document(filename, title, data, text):
     if existing:
         raise DuplicateDocument(existing[0]["id"], existing[0]["title"])
 
-    chunks = split_text(text)
-    if len(chunks) > MAX_CHUNKS:
-        raise DocumentTooLarge(
-            f"Tài liệu có {len(chunks)} chunks, vượt giới hạn {MAX_CHUNKS}. Hãy tách nhỏ file."
-        )
-
     did = str(uuid.uuid4())
-    display_name = filename.replace("\\", "/").split("/")[-1][:255] or "document"
+    display_name = _display_name(filename)
     safe_name = re.sub(r"[^\w.\-]+", "_", display_name)[:100]
     key = f"{did}/{safe_name}"
     ext = extension(display_name)
     title = (title or "").strip() or display_name.rsplit(".", 1)[0]
 
-    vectors = _embed_chunks(title, chunks)
-
     storage.put_object(key, data, CONTENT_TYPES[ext])
     try:
-        _insert_document(
-            did, title, display_name, chunks, vectors,
-            {
-                "object_key": key,
-                "content_type": CONTENT_TYPES[ext],
-                "size_bytes": len(data),
-                "content_hash": digest,
-            },
-        )
+        with transaction() as cur:
+            cur.execute(
+                "INSERT INTO documents(id,title,filename,object_key,content_type,size_bytes,content_hash,status) "
+                "VALUES(%s,%s,%s,%s,%s,%s,%s,'processing')",
+                (did, title, display_name, key, CONTENT_TYPES[ext], len(data), digest),
+            )
     except Exception:
         storage.remove_object(key)
         raise
+    return {"id": did, "title": title, "filename": display_name, "size_bytes": len(data), "status": "processing"}
 
-    return _result(did, title, display_name, chunks, vectors, len(data))
+
+def _mark_failed(did, message):
+    query("UPDATE documents SET status = 'failed', error = %s WHERE id = %s", (message[:500], did), False)
+
+
+def process_document(did):
+    """Chạy nền: đọc file gốc, trích văn bản, chia chunk, embedding rồi ghi chunk + status='processed'.
+    Mọi lỗi đều được ghi vào cột error (status='failed') để giao diện hiển thị; không ném ra ngoài."""
+    from .extract import ExtractError, extract_text
+
+    try:
+        rows = query(
+            "SELECT title, filename, object_key FROM documents WHERE id = %s AND status = 'processing'", (did,))
+        if not rows:
+            return  # bị xóa hoặc đã có tiến trình khác xử lý
+        row = rows[0]
+        data = storage.get_object(row["object_key"])
+        text = extract_text(row["filename"], data)
+        chunks = split_text(text)
+        if len(chunks) > MAX_CHUNKS:
+            raise DocumentTooLarge(
+                f"Tài liệu có {len(chunks)} chunks, vượt giới hạn {MAX_CHUNKS}. Hãy tách nhỏ file.")
+        vectors = _embed_chunks(row["title"], chunks)
+        with transaction() as cur:
+            cur.execute("DELETE FROM document_chunks WHERE document_id = %s", (did,))
+            cur.executemany(
+                "INSERT INTO document_chunks(document_id,chunk_index,content,embedding) VALUES(%s,%s,%s,%s::vector)",
+                [(did, i, c, embeddings.to_pgvector(v) if v else None)
+                 for i, (c, v) in enumerate(zip(chunks, vectors))],
+            )
+            cur.execute("UPDATE documents SET status = 'processed', error = NULL WHERE id = %s", (did,))
+    except (ExtractError, DocumentTooLarge) as exc:
+        _mark_failed(did, str(exc))
+    except Exception:
+        logger.exception("Xử lý tài liệu %s thất bại", did)
+        _mark_failed(did, "Không xử lý được tài liệu (lỗi hệ thống). Xem log ai-service rồi bấm Thử lại.")
+
+
+def retry_document(did):
+    """Chuyển tài liệu failed về processing để chạy lại. Trả False nếu không phải trạng thái failed/không có file."""
+    rows = query(
+        "UPDATE documents SET status = 'processing', error = NULL, created_at = NOW() "
+        "WHERE id = %s AND status = 'failed' AND object_key IS NOT NULL RETURNING id", (did,))
+    return bool(rows)
 
 
 def documents(viewer=PUBLIC_ONLY):
@@ -148,6 +207,7 @@ def documents(viewer=PUBLIC_ONLY):
             d.status,
             d.created_at,
             d.size_bytes,
+            d.error,
             (d.object_key IS NOT NULL) AS has_file
         FROM documents d
         WHERE """ + cond + """

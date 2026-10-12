@@ -1,12 +1,43 @@
-import { BrainCircuit, Plus, Send, Trash2 } from 'lucide-react';
+import { BrainCircuit, FileText, Plus, Send, Trash2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import Markdown from '../components/Markdown';
 import QuotaBar from '../components/QuotaBar';
 import { AccessLine } from '../components/AccessInfo';
 import { useChat } from '../hooks/useChat';
-import type { PlatformData } from '../types';
+import type { PlatformData, SourceRef } from '../types';
 
 type Props = Pick<PlatformData, 'refresh' | 'setErr'>;
+
+// Nguồn tài liệu đã dùng để trả lời, gộp theo tài liệu, kèm nhãn Công khai / tên nhóm.
+function Sources({ sources }: { sources?: SourceRef[] }) {
+  if (!sources?.length) return null;
+  const byDoc = new Map<string, SourceRef & { chunks: number[] }>();
+  for (const s of sources) {
+    const key = s.document_id || s.title || String(byDoc.size);
+    const cur = byDoc.get(key) ?? { ...s, chunks: [] };
+    if (s.chunk_index != null) cur.chunks.push(s.chunk_index);
+    byDoc.set(key, cur);
+  }
+  return (
+    <div className="sources">
+      <small>Nguồn tham khảo</small>
+      {[...byDoc.entries()].map(([key, s]) => (
+        <div className="source" key={key} title={(s.snippet || s.content || '').slice(0, 200)}>
+          <FileText size={14} />
+          <b>{s.title || 'Tài liệu'}</b>
+          {s.chunks.length > 0 && <span className="muted">chunk {s.chunks.sort((a, b) => a - b).join(', ')}</span>}
+          {s.scope === 'group' ? (
+            s.groups?.length
+              ? s.groups.map((g) => <span className="chip" key={g.id}>{g.name}</span>)
+              : <span className="chip">Nhóm</span>
+          ) : s.scope === 'public' ? (
+            <span className="chip public">Công khai</span>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function Playground({ refresh, setErr }: Props) {
   const { user } = useAuth();
@@ -93,6 +124,8 @@ export default function Playground({ refresh, setErr }: Props) {
               ) : (
                 <p className="muted">Đang xử lý{liveStep ? ': ' + liveStep : ''}…</p>
               )}
+
+              {message.role === 'ai' && <Sources sources={message.meta?.sources} />}
 
               {message.role === 'ai' && message.meta && message.meta.model !== undefined && (
                 <small className="message-meta">

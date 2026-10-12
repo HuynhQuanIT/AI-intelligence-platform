@@ -239,3 +239,25 @@ def groups_of_user(user_id) -> list[dict]:
     return [{"id": r["id"], "name": r["name"]} for r in query(
         "SELECT g.id::text AS id, g.name FROM user_groups ug JOIN groups g ON g.id = ug.group_id "
         "WHERE ug.user_id = %s ORDER BY lower(g.name)", (str(user_id),))]
+
+
+def label_sources(viewer: dict | None, sources: list) -> list:
+    """Gắn scope (public|group) và nhóm vào từng nguồn trích dẫn.
+    Admin thấy mọi nhóm của tài liệu; người dùng thường chỉ thấy nhóm CỦA MÌNH (không lộ nhóm khác)."""
+    ids = list({x["document_id"] for x in sources if x.get("document_id")})
+    if not ids:
+        return sources
+    by_doc = groups_of_documents(ids)
+    viewer = viewer or {}
+    if viewer.get("admin"):
+        mine = None  # None = không lọc
+    elif viewer.get("user_id"):
+        mine = {g["id"] for g in groups_of_user(viewer["user_id"])}
+    else:
+        mine = set()
+    out = []
+    for x in sources:
+        found = by_doc.get(x.get("document_id"), [])
+        shown = found if mine is None else [g for g in found if g["id"] in mine]
+        out.append({**x, "scope": "group" if found else "public", "groups": shown})
+    return out

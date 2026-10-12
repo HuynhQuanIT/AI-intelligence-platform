@@ -22,7 +22,7 @@ import type { Page, User } from './types';
 export default function Workspace({ user }: { user: User }) {
   const { logout, refreshUser } = useAuth();
   const [page, setPage] = useState<Page>(homePageFor(user.role));
-  const { metrics, agents, docs, traces, events, err, setErr, refresh } = usePlatformData(user.role);
+  const { metrics, agents, docs, traces, events, err, setErr, refresh, refreshDocs } = usePlatformData(user.role);
   const isAdmin = user.role === 'admin';
 
   // Đổi vai trò hoặc đăng nhập lại bằng người khác: về trang mặc định nếu trang hiện tại không còn được phép.
@@ -81,7 +81,7 @@ export default function Workspace({ user }: { user: User }) {
           )}
           {page === 'Agent Studio' && isAdmin && <AgentStudio agents={agents} />}
           {page === 'Knowledge Center' && (
-            <KnowledgeCenter docs={docs} refresh={refresh} setErr={setErr} canEdit={isAdmin} />
+            <KnowledgeCenter docs={docs} refresh={refresh} refreshDocs={refreshDocs} setErr={setErr} canEdit={isAdmin} />
           )}
           {page === 'AI Playground' && <Playground refresh={refresh} setErr={setErr} />}
           {page === 'Model Routing' && isAdmin && <ModelRouting />}

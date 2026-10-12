@@ -34,7 +34,7 @@ Destructive reset: `docker compose down -v`.
 ## Included in this baseline
 - Dashboard, Agent Studio, Knowledge Center, AI Playground, model configuration, cost metrics, traces, and security scan UI
 - LangGraph agent pipeline with conditional routing and tool calling: Supervisor classifies the request, Security Agent blocks prompt injection before the model is called, Analysis Agent filters suspicious retrieved context
-- Document ingestion from pasted text or uploaded PDF/DOCX/TXT/MD (original kept in a Docker volume; S3-compatible storage optional), paragraph-aware chunking
+- Document ingestion from pasted text or uploaded PDF/DOCX/TXT/MD (original kept in a Docker volume; S3-compatible storage optional), paragraph-aware chunking. Uploads are asynchronous: the API answers `202` at once with `status=processing`, text extraction / chunking / embedding run in the background (`processed` or `failed` + reason, admins can retry), and the UI refreshes by itself. Chat answers list their source documents with the group label of each document
 - Hybrid retrieval: keyword + Gemini embeddings in pgvector, fused with weighted Reciprocal Rank Fusion (falls back to keyword search when embeddings are unavailable)
 - Conversations saved in PostgreSQL (list, reopen, delete) and answers streamed over Server-Sent Events
 - Chat/model adapter and request/token/cost/latency logging

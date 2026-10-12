@@ -112,7 +112,20 @@ export type ChatMessage = {
     output_tokens?: number;
     cost_usd?: number;
     blocked?: boolean;
+    sources?: SourceRef[];
   };
+};
+
+// Một đoạn tài liệu chatbot đã dùng để trả lời, kèm nhãn quyền của tài liệu đó.
+export type SourceRef = {
+  document_id?: string | null;
+  title?: string | null;
+  chunk_index?: number | null;
+  similarity?: number | null;
+  snippet?: string;
+  content?: string;
+  scope?: 'public' | 'group';
+  groups?: GroupRef[];
 };
 
 export type Agent = { id: string; name: string; description: string };
@@ -121,7 +134,8 @@ export type DocumentRow = {
   id: string;
   title: string;
   filename: string;
-  status: string;
+  status: 'processing' | 'processed' | 'failed' | string;
+  error?: string | null; // lý do khi status = failed (chỉ admin nhận)
   created_at: string;
   size_bytes?: number | null;
   has_file?: boolean;
@@ -171,4 +185,5 @@ export type PlatformData = {
   events: SecurityEvent[];
   setErr: (message: string) => void;
   refresh: () => Promise<void>;
+  refreshDocs: () => Promise<void>; // nạp riêng danh sách tài liệu (nhẹ), dùng khi chờ xử lý nền
 };

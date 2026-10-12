@@ -32,6 +32,10 @@ public static class DocumentEndpoints
             async (string documentId, HttpRequest r, IHttpClientFactory f) =>
                 await AiProxy.Put(r, f, $"/documents/{Uri.EscapeDataString(documentId)}/groups"));
 
+        group.MapPost("/{documentId}/retry",
+            async (string documentId, IHttpClientFactory f) =>
+                await AiProxy.PostEmpty(f, $"/documents/{Uri.EscapeDataString(documentId)}/retry"));
+
         group.MapGet("/{documentId}/file", Download);
 
         return app;

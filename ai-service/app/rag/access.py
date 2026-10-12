@@ -22,13 +22,14 @@ def visible_sql(viewer: dict | None, alias: str = "d") -> tuple[str, tuple]:
     if viewer.get("admin"):
         return "TRUE", ()
 
+    done = f"{alias}.status = 'processed'"  # tài liệu đang xử lý/lỗi chỉ admin thấy
     no_group = f"NOT EXISTS (SELECT 1 FROM document_groups dg WHERE dg.document_id = {alias}.id)"
     user_id = viewer.get("user_id")
     if not user_id:
-        return f"({no_group})", ()
+        return f"({done} AND {no_group})", ()
 
     member = (
         "EXISTS (SELECT 1 FROM document_groups dg JOIN user_groups ug ON ug.group_id = dg.group_id "
         f"WHERE dg.document_id = {alias}.id AND ug.user_id = %s)"
     )
-    return f"({no_group} OR {member})", (user_id,)
+    return f"({done} AND ({no_group} OR {member}))", (user_id,)

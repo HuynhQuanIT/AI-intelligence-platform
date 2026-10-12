@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Download, FileText, Lock, Plus, Save, Trash2, Upload } from 'lucide-react';
+import { Download, FileText, Loader2, Lock, Plus, RefreshCw, Save, Trash2, Upload } from 'lucide-react';
 import { api, apiFetch, downloadDocument } from '../api/client';
 import Panel from '../components/Panel';
 import '../components/extras.css';
 import type { DocumentDetail, DocumentRow, Group, PlatformData } from '../types';
 
-// canEdit: chỉ admin được thêm, tải lên và xóa tài liệu; user thường chỉ xem (server cũng kiểm tra).
-type Props = Pick<PlatformData, 'docs' | 'refresh' | 'setErr'> & { canEdit: boolean };
+function StatusBadge({ status }: { status: string }) {
+  if (status === 'processing') {
+    return <span className="status-badge processing"><Loader2 size={13} className="spin" /> Đang xử lý…</span>;
+  }
+  if (status === 'failed') return <span className="status-badge failed">Lỗi</span>;
+  return <span className="status-badge processed">Đã xử lý</span>;
+}
 
-export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Props) {
+// canEdit: chỉ admin được thêm, tải lên và xóa tài liệu; user thường chỉ xem (server cũng kiểm tra).
+type Props = Pick<PlatformData, 'docs' | 'refresh' | 'refreshDocs' | 'setErr'> & { canEdit: boolean };
+
+export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, canEdit }: Props) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<DocumentDetail | null>(null);
@@ -26,6 +34,24 @@ export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Prop
   const [scopeFilter, setScopeFilter] = useState<'all' | 'mine' | 'public'>('all');
   const shownDocs = canEdit ? docs : docs.filter((d) =>
     scopeFilter === 'all' ? true : scopeFilter === 'mine' ? d.scope === 'group' : d.scope === 'public');
+
+  // Còn tài liệu đang xử lý nền: tự hỏi lại mỗi 3 giây cho tới khi xong (processed/failed).
+  const hasProcessing = docs.some((d) => d.status === 'processing');
+  useEffect(() => {
+    if (!hasProcessing) return;
+    const timer = window.setInterval(() => { refreshDocs(); }, 3000);
+    return () => window.clearInterval(timer);
+  }, [hasProcessing, refreshDocs]);
+
+  async function retryDoc(doc: DocumentRow) {
+    try {
+      setErr('');
+      await api(`/documents/${encodeURIComponent(doc.id)}/retry`, { method: 'POST' });
+      await refreshDocs();
+    } catch (error: any) {
+      setErr(error.message);
+    }
+  }
 
   useEffect(() => {
     if (!canEdit) return;
@@ -101,11 +127,8 @@ export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Prop
       }
 
       setUploadNote(
-        `Đã index "${body.title}": ${body.chunks} chunks` +
-          (body.embedded ? ', đã embedding.' : ', CHƯA có embedding (chạy reindex).') +
-          (body.security_matches?.length
-            ? ` Cảnh báo: nội dung có mẫu nghi prompt injection (${body.security_matches.join(', ')}); sẽ bị lọc khi truy xuất.`
-            : '')
+        `Đã nhận "${body.title}". Hệ thống đang xử lý nền (trích văn bản, chia chunk, embedding); ` +
+          'trạng thái trong danh sách bên dưới sẽ tự cập nhật, bạn không cần chờ ở trang này.'
       );
 
       setFile(null);
@@ -194,7 +217,7 @@ export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Prop
 
           <button className="primary" disabled={!file || uploading} onClick={uploadFile}>
             <Upload size={16} />
-            {uploading ? 'Đang xử lý...' : 'Upload và index'}
+            {uploading ? 'Đang tải lên...' : 'Upload và index'}
           </button>
 
           {uploadNote && <p className="note">{uploadNote}</p>}
@@ -249,6 +272,7 @@ export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Prop
                     {doc.filename} · {doc.size_bytes ? `${(doc.size_bytes / 1024).toFixed(1)} KB · ` : ''}
                     {new Date(doc.created_at).toLocaleString()}
                   </small>
+                  {doc.status === 'failed' && doc.error && <p className="doc-error">{doc.error}</p>}
                   <div>
                     {doc.groups?.length ? (
                       doc.groups.map((g) => <span className="chip" key={g.id}>{g.name}</span>)
@@ -258,9 +282,17 @@ export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Prop
                   </div>
                 </div>
 
-                <em>{doc.status}</em>
+                <StatusBadge status={doc.status} />
 
-                <button className="secondary" onClick={() => viewDoc(doc.id)} disabled={loadingDoc}>
+                {canEdit && doc.status === 'failed' && (
+                  <button className="secondary" onClick={() => retryDoc(doc)}>
+                    <RefreshCw size={15} />
+                    Thử lại
+                  </button>
+                )}
+
+                <button className="secondary" onClick={() => viewDoc(doc.id)}
+                  disabled={loadingDoc || doc.status !== 'processed'}>
                   <FileText size={15} />
                   Xem
                 </button>

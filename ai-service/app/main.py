@@ -11,6 +11,7 @@ from .api import (
 )
 from .core import settings
 from .core.db import init_pool
+from .rag import documents as documents_store
 from .services import auth, conversations, groups
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ async def lifespan(app: FastAPI):
     conversations.ensure_schema()
     auth.ensure_schema()
     groups.ensure_schema()
+    documents_store.ensure_schema()
     auth.bootstrap_admin()
     yield
 
