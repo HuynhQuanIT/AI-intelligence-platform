@@ -25,6 +25,17 @@ export type Quota = {
 
 export type GroupRef = { id: string; name: string };
 
+export type MyGroup = {
+  id: string;
+  name: string;
+  description: string;
+  document_count: number;
+  added_at: string | null;
+};
+
+// Người dùng xem được gì: nhóm của mình, tổng tài liệu xem được, số tài liệu thuộc các nhóm của mình.
+export type Access = { groups: MyGroup[]; visible_documents: number; group_documents: number };
+
 export type User = {
   id: string;
   email: string;
@@ -34,6 +45,7 @@ export type User = {
   last_login_at: string | null;
   daily_message_quota?: number | null;
   quota?: Quota; // chỉ có ở /auth/me
+  access?: Access; // chỉ có ở /auth/me
 };
 
 export type Group = {
@@ -113,7 +125,8 @@ export type DocumentRow = {
   created_at: string;
   size_bytes?: number | null;
   has_file?: boolean;
-  groups?: GroupRef[]; // chỉ admin nhận; rỗng = công khai cho mọi người đã đăng nhập
+  groups?: GroupRef[]; // admin: mọi nhóm; user: chỉ nhóm của mình. Admin rỗng = công khai
+  scope?: 'public' | 'group'; // chỉ user thường nhận
 };
 
 export type DocumentDetail = {

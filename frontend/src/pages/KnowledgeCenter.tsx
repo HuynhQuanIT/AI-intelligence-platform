@@ -22,6 +22,10 @@ export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Prop
   const [accessDocId, setAccessDocId] = useState('');
   const [accessIds, setAccessIds] = useState<Set<string>>(new Set());
   const [savingAccess, setSavingAccess] = useState(false);
+  // User thường: lọc theo "tài liệu của nhóm tôi" hoặc "công khai".
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'mine' | 'public'>('all');
+  const shownDocs = canEdit ? docs : docs.filter((d) =>
+    scopeFilter === 'all' ? true : scopeFilter === 'mine' ? d.scope === 'group' : d.scope === 'public');
 
   useEffect(() => {
     if (!canEdit) return;
@@ -224,9 +228,17 @@ export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Prop
       )}
 
       {/* Indexed document list */}
-      <Panel title={`Indexed documents (${docs.length})`}>
-        {docs.length ? (
-          docs.map((doc) => (
+      <Panel title={`Indexed documents (${shownDocs.length}${shownDocs.length !== docs.length ? `/${docs.length}` : ''})`}>
+        {!canEdit && (
+          <div className="scope-filter">
+            {([['all', 'Tất cả'], ['mine', 'Của nhóm tôi'], ['public', 'Công khai']] as const).map(([k, label]) => (
+              <button key={k} className={scopeFilter === k ? 'secondary active' : 'secondary'}
+                onClick={() => setScopeFilter(k)}>{label}</button>
+            ))}
+          </div>
+        )}
+        {shownDocs.length ? (
+          shownDocs.map((doc) => (
             <div key={doc.id}>
               <div className="row">
                 <FileText />
@@ -237,15 +249,13 @@ export default function KnowledgeCenter({ docs, refresh, setErr, canEdit }: Prop
                     {doc.filename} · {doc.size_bytes ? `${(doc.size_bytes / 1024).toFixed(1)} KB · ` : ''}
                     {new Date(doc.created_at).toLocaleString()}
                   </small>
-                  {canEdit && (
-                    <div>
-                      {doc.groups?.length ? (
-                        doc.groups.map((g) => <span className="chip" key={g.id}>{g.name}</span>)
-                      ) : (
-                        <span className="chip public">Công khai (mọi người đã đăng nhập)</span>
-                      )}
-                    </div>
-                  )}
+                  <div>
+                    {doc.groups?.length ? (
+                      doc.groups.map((g) => <span className="chip" key={g.id}>{g.name}</span>)
+                    ) : (
+                      <span className="chip public">Công khai (mọi người đã đăng nhập)</span>
+                    )}
+                  </div>
                 </div>
 
                 <em>{doc.status}</em>

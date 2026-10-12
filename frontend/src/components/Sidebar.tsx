@@ -1,4 +1,5 @@
 import { BrainCircuit, LogOut } from 'lucide-react';
+import { GroupChips } from './AccessInfo';
 import { GROUPS, pagesFor } from '../config/navigation';
 import type { Page, User } from '../types';
 
@@ -23,6 +24,7 @@ export default function Sidebar({ page, onSelect, user, onLogout }: Props) {
       <div className="workspace" title={user.email}>
         {user.email}
         <small className="role-badge">{user.role === 'admin' ? 'Admin' : 'User'}</small>
+        <GroupChips access={user.access} />
       </div>
 
       {GROUPS.map((group) => {

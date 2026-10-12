@@ -56,6 +56,28 @@ export default function Account() {
           <b>{user.last_login_at ? new Date(user.last_login_at).toLocaleString() : '—'}</b>
         </div>
 
+        <h4 className="subhead">Nhóm của tôi</h4>
+        {user.role === 'admin' ? (
+          <p className="note">Quản trị viên xem được toàn bộ tài liệu, không cần thuộc nhóm.</p>
+        ) : user.access?.groups.length ? (
+          <div className="my-group-list">
+            {user.access.groups.map((g) => (
+              <div className="my-group" key={g.id}>
+                <b>{g.name}</b>
+                <small>{g.description || 'Không có mô tả'} · {g.document_count} tài liệu</small>
+              </div>
+            ))}
+            <p className="note">
+              Bạn xem được {user.access.visible_documents} tài liệu: tài liệu công khai và tài liệu của các nhóm trên.
+            </p>
+          </div>
+        ) : (
+          <p className="note">
+            Bạn chưa thuộc nhóm nào, nên chỉ xem được {user.access?.visible_documents ?? 0} tài liệu công khai. Hãy
+            nhờ quản trị viên thêm bạn vào nhóm nếu cần xem thêm.
+          </p>
+        )}
+
         <h4 className="subhead">Hạn mức tin nhắn hôm nay</h4>
         <QuotaBar quota={user.quota} />
         <p className="note">Chỉ tin nhắn được trả lời thành công mới tính vào hạn mức.</p>

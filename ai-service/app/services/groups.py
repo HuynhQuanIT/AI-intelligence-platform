@@ -31,6 +31,7 @@ SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS user_groups_user_idx ON user_groups(user_id)",
+    "ALTER TABLE user_groups ADD COLUMN IF NOT EXISTS added_at TIMESTAMPTZ NOT NULL DEFAULT NOW()",
     """
     CREATE TABLE IF NOT EXISTS document_groups(
         document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -138,17 +139,70 @@ def delete_group(group_id: str) -> None:
     query("DELETE FROM groups WHERE id = %s", (gid,), False)
 
 
-def set_members(group_id: str, user_ids: list[str]) -> dict:
-    gid = get_group(group_id)["id"]
+def apply_members(group_id: str, user_ids: list[str]) -> tuple[dict, list[dict]]:
+    """Đặt danh sách thành viên theo kiểu so sánh (giữ nguyên added_at của người đã có).
+    Trả (nhóm, [{id, email}] những người MỚI được thêm) để gửi thông báo."""
+    group = get_group(group_id)
+    gid = group["id"]
     ids = list(dict.fromkeys(_uuid(u, "người dùng") for u in user_ids))
     if ids:
         found = {r["id"] for r in query("SELECT id::text AS id FROM users WHERE id = ANY(%s::uuid[])", (ids,))}
         if found != set(ids):
             raise GroupError(404, "Có người dùng không tồn tại.")
+    current = {m["id"] for m in group["members"]}
+    added = [u for u in ids if u not in current]
+    removed = [u for u in current if u not in set(ids)]
     with transaction() as cur:
-        cur.execute("DELETE FROM user_groups WHERE group_id = %s", (gid,))
-        cur.executemany("INSERT INTO user_groups(group_id, user_id) VALUES (%s, %s)", [(gid, u) for u in ids])
-    return get_group(gid)
+        if removed:
+            cur.execute("DELETE FROM user_groups WHERE group_id = %s AND user_id = ANY(%s::uuid[])", (gid, removed))
+        if added:
+            cur.executemany("INSERT INTO user_groups(group_id, user_id) VALUES (%s, %s)", [(gid, u) for u in added])
+    new_users = query("SELECT id::text AS id, email FROM users WHERE id = ANY(%s::uuid[])", (added,)) if added else []
+    return get_group(gid), new_users
+
+
+def set_members(group_id: str, user_ids: list[str]) -> dict:
+    return apply_members(group_id, user_ids)[0]
+
+
+def membership_mail(email: str, group: dict) -> tuple[str, str, str]:
+    n = group["document_count"]
+    docs = f"Nhờ vậy bạn xem được thêm {n} tài liệu của nhóm này trong Knowledge Center và chatbot sẽ dùng chúng khi trả lời bạn." \
+        if n else "Hiện nhóm chưa có tài liệu riêng; khi có, bạn sẽ xem được ngay."
+    return (email, f"Bạn đã được thêm vào nhóm {group['name']}",
+            f"Quản trị viên vừa thêm bạn vào nhóm \"{group['name']}\". {docs}\n"
+            "Xem nhóm của bạn ở trang My Account.")
+
+
+def access_summary(user: dict) -> dict:
+    """Thông tin để người dùng biết mình thuộc nhóm nào và đang xem được bao nhiêu tài liệu."""
+    from ..rag.access import viewer_of, visible_sql
+    cond, params = visible_sql(viewer_of(user), "d")
+    total = query(f"SELECT COUNT(*)::int AS n FROM documents d WHERE {cond}", params)[0]["n"]
+    mine = [] if user.get("role") == "admin" else [
+        {"id": r["id"], "name": r["name"], "description": r["description"], "document_count": r["document_count"],
+         "added_at": r["added_at"].isoformat() if r["added_at"] else None}
+        for r in query(
+            """
+            SELECT g.id::text AS id, g.name, g.description, ug.added_at,
+                   (SELECT COUNT(*) FROM document_groups dg WHERE dg.group_id = g.id)::int AS document_count
+            FROM user_groups ug JOIN groups g ON g.id = ug.group_id
+            WHERE ug.user_id = %s ORDER BY lower(g.name)
+            """, (str(user["id"]),))]
+    in_groups = sum(g["document_count"] for g in mine)
+    return {"groups": mine, "visible_documents": total, "group_documents": in_groups}
+
+
+def mark_documents_for(user: dict, rows: list[dict]) -> list[dict]:
+    """Gắn scope (public|group) và chỉ các nhóm CỦA CHÍNH người dùng vào từng tài liệu."""
+    by_doc = groups_of_documents([r["id"] for r in rows])
+    mine = {g["id"] for g in groups_of_user(user["id"])}
+    out = []
+    for r in rows:
+        all_groups = by_doc.get(r["id"], [])
+        out.append({**r, "scope": "group" if all_groups else "public",
+                    "groups": [g for g in all_groups if g["id"] in mine]})
+    return out
 
 
 def set_document_groups(document_id: str, group_ids: list[str]) -> list[dict]:

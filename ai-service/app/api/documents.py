@@ -92,9 +92,12 @@ async def upload_document(
 def get_docs(user: dict = Depends(current_user)):
     rows = documents(viewer_of(user))
     if user["role"] == "admin":
-        # Chỉ admin thấy tài liệu thuộc nhóm nào; người dùng thường không cần biết cấu trúc nhóm.
+        # Admin thấy mọi nhóm của tài liệu.
         by_doc = groups.groups_of_documents([r["id"] for r in rows])
         rows = [{**r, "groups": by_doc.get(r["id"], [])} for r in rows]
+    else:
+        # Người dùng thường chỉ thấy nhãn: Công khai, hoặc tên các nhóm CỦA MÌNH chứa tài liệu.
+        rows = groups.mark_documents_for(user, rows)
     return rows
 
 

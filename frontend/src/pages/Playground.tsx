@@ -2,6 +2,7 @@ import { BrainCircuit, Plus, Send, Trash2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import Markdown from '../components/Markdown';
 import QuotaBar from '../components/QuotaBar';
+import { AccessLine } from '../components/AccessInfo';
 import { useChat } from '../hooks/useChat';
 import type { PlatformData } from '../types';
 
@@ -52,6 +53,7 @@ export default function Playground({ refresh, setErr }: Props) {
             <b>RAG Assistant</b>
             <div className="muted">AI request playground</div>
             <QuotaBar quota={user?.quota} />
+            <AccessLine access={user?.access} />
           </div>
 
           <div className="chat-actions">

@@ -74,11 +74,12 @@ def test_file_download_respects_groups(client, setup):
     assert cm.get(f"/documents/{did}/file", headers=hm).status_code == 200
 
 
-def test_only_admin_sees_group_names_in_list(client, setup):
+def test_admin_sees_all_groups_user_only_own_in_list(client, setup):
     hm, cm, _ = setup["member"]
     row = next(d for d in client.get("/documents").json() if d["id"] == setup["sec"])
     assert row["groups"][0]["id"] == setup["gid"]
-    assert all("groups" not in d for d in cm.get("/documents", headers=hm).json())
+    ho, co, _ = setup["outsider"]
+    assert all(d["groups"] == [] for d in co.get("/documents", headers=ho).json())  # người ngoài nhóm không thấy tên nhóm
 
 
 def test_rag_retrieval_filters_by_viewer(client, setup):
@@ -171,3 +172,53 @@ def test_group_crud_validation_and_admin_only(client, setup):
 def test_user_detail_lists_groups(client, setup):
     d = client.get(f"/users/{setup['member'][2]}").json()
     assert [g["id"] for g in d["groups"]] == [setup["gid"]]
+
+
+# ---- người dùng biết mình thuộc nhóm nào ----
+
+def test_me_shows_my_groups_and_visible_documents(client, setup):
+    hm, cm, _ = setup["member"]
+    ho, co, _ = setup["outsider"]
+    mine = cm.get("/auth/me", headers=hm).json()["access"]
+    assert [g["id"] for g in mine["groups"]] == [setup["gid"]]
+    assert mine["groups"][0]["document_count"] == 1 and mine["group_documents"] == 1
+    other = co.get("/auth/me", headers=ho).json()["access"]
+    assert other["groups"] == []
+    assert mine["visible_documents"] == other["visible_documents"] + 1  # thành viên xem thêm đúng 1 tài liệu nhóm
+
+
+def test_user_document_list_labels_scope_and_only_own_groups(client, setup):
+    hm, cm, _ = setup["member"]
+    other_gid = group(client)
+    client.put(f"/documents/{setup['sec']}/groups", json={"ids": [setup["gid"], other_gid]})
+    rows = {d["id"]: d for d in cm.get("/documents", headers=hm).json()}
+    assert rows[setup["pub"]]["scope"] == "public" and rows[setup["pub"]]["groups"] == []
+    sec = rows[setup["sec"]]
+    assert sec["scope"] == "group"
+    assert [g["id"] for g in sec["groups"]] == [setup["gid"]]  # không lộ nhóm khác của tài liệu
+
+
+def test_adding_member_sends_mail_only_to_new_people(client, setup, monkeypatch):
+    from app.services import mailer
+    monkeypatch.setenv("MAIL_BACKEND", "memory")
+    mailer.OUTBOX.clear()
+    _, hn, uidn, cn = make_user()
+    emails = {u["email"]: u["id"] for u in client.get("/users").json()}
+    new_email = next(e for e, i in emails.items() if i == uidn)
+    old_id = setup["member"][2]
+    r = client.put(f"/groups/{setup['gid']}/members", json={"ids": [old_id, uidn]})
+    assert r.status_code == 200 and r.json()["added"] == [new_email]
+    sent = [m for m in mailer.OUTBOX if "được thêm vào nhóm" in m["subject"]]
+    assert [m["to"] for m in sent] == [new_email]
+    # lưu lại cùng danh sách: không ai mới, không gửi thêm
+    mailer.OUTBOX.clear()
+    assert client.put(f"/groups/{setup['gid']}/members", json={"ids": [old_id, uidn]}).json()["added"] == []
+    assert not [m for m in mailer.OUTBOX if "được thêm vào nhóm" in m["subject"]]
+
+
+def test_member_added_at_is_kept_when_saving_again(client, setup):
+    gid, uid = setup["gid"], setup["member"][2]
+    first = query("SELECT added_at FROM user_groups WHERE group_id=%s AND user_id=%s", (gid, uid))[0]["added_at"]
+    client.put(f"/groups/{gid}/members", json={"ids": [uid]})
+    again = query("SELECT added_at FROM user_groups WHERE group_id=%s AND user_id=%s", (gid, uid))[0]["added_at"]
+    assert first == again

@@ -131,8 +131,16 @@ test('nhóm và phân quyền tài liệu: người ngoài nhóm không thấy, 
   await expect(admin.getByText('Đã lưu thành viên.')).toBeVisible();
 
   await user.reload();
+  // Người dùng biết mình vừa vào nhóm: banner, chip ở thanh bên và nhãn trên tài liệu.
+  await expect(user.locator('.group-banner')).toContainText(groupName);
+  await expect(user.locator('aside .chip', { hasText: groupName })).toBeVisible();
   await openPage(user, 'Knowledge Center');
   await expect(user.getByText(docTitle, { exact: true })).toBeVisible();
+  await expect(user.locator('.row', { hasText: docTitle }).locator('.chip', { hasText: groupName })).toBeVisible();
+  await user.getByRole('button', { name: 'Của nhóm tôi' }).click();
+  await expect(user.getByText(docTitle, { exact: true })).toBeVisible();
+  await user.getByRole('button', { name: 'Công khai', exact: true }).click();
+  await expect(user.getByText(docTitle, { exact: true })).toHaveCount(0);
 
   // Không xóa được nhóm đang là nhóm duy nhất của tài liệu.
   admin.once('dialog', (dialog) => dialog.accept());

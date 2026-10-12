@@ -7,7 +7,7 @@ from ..schemas import (
     AdminPasswordBody, ChangeEmailBody, EmailBody, LoginBody, OtpBody, PasswordBody,
     PasswordChangeBody, QuotaBody, ResetBody, RoleBody,
 )
-from ..services import auth, mailer
+from ..services import auth, groups, mailer
 from .deps import client_ip, current_user, raise_http, require_admin
 
 router = APIRouter(tags=["auth"])
@@ -84,7 +84,7 @@ def _user_agent(request: Request) -> str:
 
 def _with_quota(user: dict) -> dict:
     row = auth._get(user["id"])
-    return {**user, "quota": auth.quota_status(row)}
+    return {**user, "quota": auth.quota_status(row), "access": groups.access_summary(user)}
 
 
 @router.post("/auth/login")

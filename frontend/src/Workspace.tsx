@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAuth } from './auth/AuthContext';
 import Sidebar from './components/Sidebar';
+import NewGroupBanner from './components/NewGroupBanner';
 import { PAGE_DESCRIPTIONS, homePageFor, pagesFor } from './config/navigation';
 import { usePlatformData } from './hooks/usePlatformData';
 import AgentStudio from './pages/AgentStudio';
@@ -19,7 +20,7 @@ import type { Page, User } from './types';
 
 // Khung ứng dụng sau khi đăng nhập: thanh bên theo vai trò, tiêu đề, thông báo lỗi và chọn trang.
 export default function Workspace({ user }: { user: User }) {
-  const { logout } = useAuth();
+  const { logout, refreshUser } = useAuth();
   const [page, setPage] = useState<Page>(homePageFor(user.role));
   const { metrics, agents, docs, traces, events, err, setErr, refresh } = usePlatformData(user.role);
   const isAdmin = user.role === 'admin';
@@ -28,6 +29,14 @@ export default function Workspace({ user }: { user: User }) {
   useEffect(() => {
     if (!pagesFor(user.role).some((item) => item.name === page)) setPage(homePageFor(user.role));
   }, [user.role, page]);
+
+  // Admin vừa thêm/bớt nhóm thì người dùng thấy ngay khi quay lại tab, không phải đăng nhập lại.
+  useEffect(() => {
+    if (isAdmin) return;
+    const onFocus = () => { refreshUser().catch(() => undefined); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [isAdmin, refreshUser]);
 
   return (
     <div className="app">
@@ -57,6 +66,8 @@ export default function Workspace({ user }: { user: User }) {
               Refresh
             </button>
           </div>
+
+          {!isAdmin && <NewGroupBanner access={user.access} onOpen={setPage} />}
 
           {err && (
             <div className="error">
