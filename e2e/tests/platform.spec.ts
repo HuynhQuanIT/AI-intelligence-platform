@@ -353,3 +353,42 @@ test('chatbot: nút Dừng hủy câu trả lời đang chạy và cho gửi l�
   await expect(page.getByPlaceholder('Message your AI assistant...')).toBeEnabled();
   await page.unroute('**/chat/stream');
 });
+
+test('giao diện Sáng / Tối / Theo hệ thống: đổi ngay, nhớ sau khi tải lại', async ({ browser }) => {
+  const { page } = await newSession(browser);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await openPage(page, 'My Account');
+
+  const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
+  const bodyBg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const stored = () => page.evaluate(() => localStorage.getItem('aip-theme'));
+  const group = page.getByRole('radiogroup', { name: 'Giao diện' });
+
+  // Mặc định là "Theo hệ thống" (hệ thống đang tối).
+  await expect(group.getByRole('radio', { name: /Theo hệ thống/ })).toBeChecked();
+  expect(await theme()).toBe('dark');
+  const darkBg = await bodyBg();
+
+  await group.getByText('Sáng', { exact: true }).click();
+  await expect.poll(theme).toBe('light');
+  expect(await bodyBg()).not.toBe(darkBg); // màu nền đổi ngay, không cần tải lại
+  expect(await stored()).toBe('light');
+
+  await page.reload();
+  expect(await theme()).toBe('light'); // nhớ lại lựa chọn
+  await openPage(page, 'My Account');
+  await expect(group.getByRole('radio', { name: /Sáng/ })).toBeChecked();
+
+  await group.getByText('Tối', { exact: true }).click();
+  await expect.poll(theme).toBe('dark');
+  expect(await bodyBg()).toBe(darkBg);
+
+  // "Theo hệ thống": bám theo hệ điều hành, kể cả khi hệ điều hành đổi lúc đang mở trang.
+  await group.getByText('Theo hệ thống', { exact: true }).click();
+  expect(await stored()).toBe('system');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect.poll(theme).toBe('light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect.poll(theme).toBe('dark');
+});

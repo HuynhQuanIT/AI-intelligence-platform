@@ -1,1 +1,11 @@
-<!doctype html><html lang="vi"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><title>AI Intelligence Platform</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+<!doctype html><html lang="vi"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><title>AI Intelligence Platform</title><script>
+(function () {
+  var theme = 'dark';
+  try {
+    var pref = localStorage.getItem('aip-theme');
+    if (pref === 'light' || pref === 'dark') theme = pref;
+    else if (window.matchMedia && !window.matchMedia('(prefers-color-scheme: dark)').matches) theme = 'light';
+  } catch (e) {}
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>

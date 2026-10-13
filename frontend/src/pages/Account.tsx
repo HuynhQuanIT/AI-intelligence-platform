@@ -1,13 +1,36 @@
 import { useState, type FormEvent } from 'react';
-import { KeyRound } from 'lucide-react';
+import { KeyRound, Monitor, Moon, Sun } from 'lucide-react';
 import { api, type Session } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import Panel from '../components/Panel';
 import PasswordInput from '../components/PasswordInput';
 import QuotaBar from '../components/QuotaBar';
+import { useTheme, type ThemePreference } from '../theme';
 import '../components/extras.css';
 
 const MIN_LENGTH = 10;
+
+const THEMES: { id: ThemePreference; label: string; hint: string; icon: typeof Sun }[] = [
+  { id: 'light', label: 'Sáng', hint: 'Nền sáng, chữ tối', icon: Sun },
+  { id: 'dark', label: 'Tối', hint: 'Nền tối, dịu mắt khi dùng ban đêm', icon: Moon },
+  { id: 'system', label: 'Theo hệ thống', hint: 'Tự đổi theo cài đặt của thiết bị', icon: Monitor },
+];
+
+// Đổi là áp dụng ngay cho toàn bộ trang và nhớ cho lần mở sau (lưu trên trình duyệt này).
+function ThemePicker() {
+  const { pref, setPref } = useTheme();
+  return (
+    <div className="theme-options" role="radiogroup" aria-label="Giao diện">
+      {THEMES.map(({ id, label, hint, icon: Icon }) => (
+        <label key={id} className={'theme-option' + (pref === id ? ' selected' : '')}>
+          <input type="radio" name="theme" value={id} checked={pref === id} onChange={() => setPref(id)} />
+          <Icon size={18} />
+          <span><b>{label}</b><small>{hint}</small></span>
+        </label>
+      ))}
+    </div>
+  );
+}
 
 // Tài khoản của chính mình: xem hạn mức hôm nay và tự đổi mật khẩu.
 export default function Account() {
@@ -81,6 +104,11 @@ export default function Account() {
         <h4 className="subhead">Hạn mức tin nhắn hôm nay</h4>
         <QuotaBar quota={user.quota} />
         <p className="note">Chỉ tin nhắn được trả lời thành công mới tính vào hạn mức.</p>
+      </Panel>
+
+      <Panel title="Giao diện">
+        <ThemePicker />
+        <p className="note">Lựa chọn được lưu trên trình duyệt này, không ảnh hưởng thiết bị khác.</p>
       </Panel>
 
       <Panel title="Đổi mật khẩu">
