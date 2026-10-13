@@ -322,6 +322,13 @@ test('chatbot: 👍/👎 lưu lại sau khi tải lại, sinh lại câu trả l
   await expect(page.locator('.bubble.ai')).toHaveCount(1);
   await expect(page.locator('.bubble.ai').last().getByRole('button', { name: 'Câu trả lời chưa tốt' })).toHaveAttribute('aria-pressed', 'false');
 
+  // Tải lại từ server: lượt cũ đã bị xóa thật (không còn 2 câu hỏi giống nhau trong DB).
+  await page.reload();
+  await openPage(page, 'AI Playground');
+  await page.locator('.conv-item', { hasText: renamed }).getByRole('button').first().click();
+  await expect(page.locator('.bubble.user')).toHaveCount(1);
+  await expect(page.locator('.bubble.ai')).toHaveCount(1);
+
   // Đánh giá lại 👎 để admin thấy trong Feedback.
   await page.locator('.bubble.ai').last().getByRole('button', { name: 'Câu trả lời chưa tốt' }).click();
   await openPage(page, 'Feedback');

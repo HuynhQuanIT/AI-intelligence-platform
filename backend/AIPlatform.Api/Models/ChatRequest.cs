@@ -22,6 +22,10 @@ public sealed class ChatRequest
 
     [JsonPropertyName("conversation_id")]
     public string? ConversationId { get; set; }
+
+    // Sinh lại câu trả lời cuối của hội thoại: ai-service xóa lượt hỏi-đáp cuối rồi trả lời lại.
+    [JsonPropertyName("regenerate")]
+    public bool Regenerate { get; set; }
 }
 
 public sealed class HistoryItem
