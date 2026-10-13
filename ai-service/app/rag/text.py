@@ -40,11 +40,13 @@ STOPWORDS = {
     "those", "i", "you", "we", "they", "he", "she", "my", "your", "our",
     "their", "can", "could", "should", "would", "will", "may", "might",
     "about", "as", "if", "so", "than", "then", "there", "has", "have", "had",
+    "much", "many", "long", "often",  # "how much/many/long/often": từ hỏi số lượng, không mang chủ đề
     # Vietnamese (không dấu)
     "la", "gi", "va", "cua", "co", "cho", "cac", "nhung", "mot", "nay",
     "duoc", "trong", "khi", "de", "voi", "thi", "ma", "hay", "nhu", "nao",
     "khong", "bi", "o", "tai", "ve", "tu", "den", "da", "se", "dang",
     "rat", "cung", "nhe", "ban", "toi", "minh",
+    "bao", "nhieu", "lau", "sao", "ra",  # "bao nhiêu / bao lâu / ra sao": từ hỏi, không mang chủ đề
 }
 
 

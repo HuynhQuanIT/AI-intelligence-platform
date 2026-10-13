@@ -59,9 +59,23 @@ jobs:
           PGPASSWORD=platform_dev_password psql -h localhost -U platform -d aiplatform \
             -v ON_ERROR_STOP=1 -f infra/postgres/init.sql
 
+      - name: Install Tesseract (OCR tests must run, not be skipped)
+        run: sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-eng tesseract-ocr-vie
+
       - name: Run tests
         working-directory: ai-service
         run: pytest -v
+
+      - name: RAG quality report (có / không reranking)
+        working-directory: ai-service
+        run: python -m eval.run_rag_eval --compare off,heuristic --json rag-eval.json --summary "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rag-eval
+          path: ai-service/rag-eval.json
+          if-no-files-found: ignore
 
   frontend:
     name: frontend (type-check + build)

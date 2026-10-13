@@ -1,4 +1,5 @@
-import { BrainCircuit, FileText, Plus, Send, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { BrainCircuit, Check, FileText, Pencil, Plus, RotateCw, Send, Square, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import Markdown from '../components/Markdown';
 import QuotaBar from '../components/QuotaBar';
@@ -55,12 +56,30 @@ function Sources({ sources, onOpen }: { sources?: SourceRef[]; onOpen: Props['on
   );
 }
 
+// Tên hội thoại: bấm bút chì để sửa tại chỗ (Enter lưu, Esc hủy).
+function RenameBox({ initial, onSave, onCancel }: { initial: string; onSave: (t: string) => void; onCancel: () => void }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <div className="conv-rename">
+      <input autoFocus value={value} maxLength={60} aria-label="Tên hội thoại"
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onSave(value);
+          if (e.key === 'Escape') onCancel();
+        }} />
+      <button title="Lưu tên" aria-label="Lưu tên" onClick={() => onSave(value)} disabled={!value.trim()}><Check size={13} /></button>
+      <button title="Hủy" aria-label="Hủy" onClick={onCancel}><X size={13} /></button>
+    </div>
+  );
+}
+
 export default function Playground({ refresh, setErr, onOpenDocument }: Props) {
   const { user } = useAuth();
   const {
     q, setQ, chat, useRag, setUseRag, sending, conversations, activeId, liveStep, messagesRef,
-    openConversation, newConversation, removeConversation, send,
+    openConversation, newConversation, removeConversation, renameConversation, send, stop, regenerate, rate,
   } = useChat({ refresh, setErr });
+  const [renaming, setRenaming] = useState<string | null>(null);
 
   return (
     <div className="chat-layout">
@@ -73,15 +92,26 @@ export default function Playground({ refresh, setErr, onOpenDocument }: Props) {
 
         {conversations.map((c) => (
           <div key={c.id} className={'conv-item' + (c.id === activeId ? ' active' : '')}>
-            <button
-              className="conv-open"
-              onClick={() => openConversation(c.id)}
-              disabled={sending}
-              title={c.title}
-            >
-              <span>{c.title}</span>
-              <small>{new Date(c.updated_at).toLocaleString()}</small>
-            </button>
+            {renaming === c.id ? (
+              <RenameBox initial={c.title} onCancel={() => setRenaming(null)}
+                onSave={(t) => { setRenaming(null); void renameConversation(c.id, t); }} />
+            ) : (
+              <>
+                <button
+                  className="conv-open"
+                  onClick={() => openConversation(c.id)}
+                  disabled={sending}
+                  title={c.title}
+                >
+                  <span>{c.title}</span>
+                  <small>{new Date(c.updated_at).toLocaleString()}</small>
+                </button>
+                <button className="conv-delete" onClick={() => setRenaming(c.id)} title="Đổi tên hội thoại"
+                  aria-label="Đổi tên hội thoại">
+                  <Pencil size={13} />
+                </button>
+              </>
+            )}
             <button
               className="conv-delete"
               onClick={() => removeConversation(c.id)}
@@ -143,6 +173,30 @@ export default function Playground({ refresh, setErr, onOpenDocument }: Props) {
 
               {message.role === 'ai' && <Sources sources={message.meta?.sources} onOpen={onOpenDocument} />}
 
+              {message.role === 'ai' && message.stopped && <small className="stopped-note">Đã dừng trả lời</small>}
+
+              {message.role === 'ai' && !message.streaming && (
+                <div className="msg-actions">
+                  {message.id !== undefined && (
+                    <>
+                      <button className={'icon-btn' + (message.feedback === 1 ? ' on' : '')} aria-pressed={message.feedback === 1}
+                        title="Câu trả lời tốt" aria-label="Câu trả lời tốt" onClick={() => rate(index, 1)}>
+                        <ThumbsUp size={14} />
+                      </button>
+                      <button className={'icon-btn down' + (message.feedback === -1 ? ' on' : '')} aria-pressed={message.feedback === -1}
+                        title="Câu trả lời chưa tốt" aria-label="Câu trả lời chưa tốt" onClick={() => rate(index, -1)}>
+                        <ThumbsDown size={14} />
+                      </button>
+                    </>
+                  )}
+                  {index === chat.length - 1 && !sending && (
+                    <button className="icon-btn" title="Sinh lại câu trả lời" aria-label="Sinh lại câu trả lời" onClick={regenerate}>
+                      <RotateCw size={14} /> Sinh lại
+                    </button>
+                  )}
+                </div>
+              )}
+
               {message.role === 'ai' && message.meta && message.meta.model !== undefined && (
                 <small className="message-meta">
                   Model: {message.meta.model || (message.meta.blocked ? 'blocked by Security Agent' : 'unknown')}
@@ -172,9 +226,15 @@ export default function Playground({ refresh, setErr, onOpenDocument }: Props) {
             disabled={sending}
           />
 
-          <button className="primary" onClick={send} disabled={!q.trim() || sending}>
-            <Send size={17} />
-          </button>
+          {sending ? (
+            <button className="primary stop-btn" onClick={stop} title="Dừng trả lời" aria-label="Dừng trả lời">
+              <Square size={15} /> Dừng
+            </button>
+          ) : (
+            <button className="primary" onClick={() => send()} disabled={!q.trim()} aria-label="Gửi">
+              <Send size={17} />
+            </button>
+          )}
         </div>
 
         <small className="muted center">AI can make mistakes. Verify important information.</small>

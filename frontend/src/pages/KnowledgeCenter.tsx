@@ -224,12 +224,12 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
             Index document
           </button>
 
-          <label>Hoặc tải file lên (.pdf, .docx, .txt, .md - tối đa 10 MB)</label>
+          <label>Hoặc tải file lên (.pdf, .docx, .xlsx, .pptx, .txt, .md, ảnh .png/.jpg có OCR - tối đa 10 MB)</label>
 
           <input
             key={fileInputKey}
             type="file"
-            accept=".pdf,.docx,.txt,.md"
+            accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.png,.jpg,.jpeg"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
           />
 

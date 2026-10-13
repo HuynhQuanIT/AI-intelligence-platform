@@ -86,9 +86,10 @@ def messages(conversation_id: str, user_id: str) -> list[dict]:
     if not exists(conversation_id, user_id):
         raise ConversationNotFound(conversation_id)
     rows = query(
-        "SELECT id, role, content, meta, created_at FROM messages "
-        "WHERE conversation_id = %s ORDER BY id",
-        (conversation_id,),
+        "SELECT m.id, m.role, m.content, m.meta, m.created_at, f.rating AS feedback "
+        "FROM messages m LEFT JOIN message_feedback f ON f.message_id = m.id AND f.user_id = %s "
+        "WHERE m.conversation_id = %s ORDER BY m.id",
+        (user_id, conversation_id),
     )
     return [
         {
@@ -96,6 +97,7 @@ def messages(conversation_id: str, user_id: str) -> list[dict]:
             "role": r["role"],
             "text": r["content"],
             "meta": r["meta"] or {},
+            "feedback": r["feedback"],
             "created_at": r["created_at"].isoformat(),
         }
         for r in rows
@@ -112,14 +114,15 @@ def recent_history(conversation_id: str, limit: int = HISTORY_LIMIT) -> list[dic
     return [{"role": r["role"], "text": r["content"][:12000]} for r in reversed(rows)]
 
 
-def add_message(conversation_id: str, role: str, content: str, meta: dict | None = None):
-    """Thêm tin nhắn. Tin nhắn đầu tiên của người dùng đặt tên hội thoại."""
+def add_message(conversation_id: str, role: str, content: str, meta: dict | None = None) -> int:
+    """Thêm tin nhắn, trả id của nó. Tin nhắn đầu tiên của người dùng đặt tên hội thoại."""
     with transaction() as cur:
         cur.execute(
             "INSERT INTO messages(conversation_id, role, content, meta) "
-            "VALUES (%s, %s, %s, %s)",
+            "VALUES (%s, %s, %s, %s) RETURNING id",
             (conversation_id, role, content, Jsonb(meta or {})),
         )
+        message_id = cur.fetchone()["id"]
         if role == "user":
             title = " ".join(content.split())[:MAX_TITLE]
             cur.execute(
@@ -131,6 +134,42 @@ def add_message(conversation_id: str, role: str, content: str, meta: dict | None
             "UPDATE conversations SET updated_at = NOW() WHERE id = %s",
             (conversation_id,),
         )
+    return message_id
+
+
+def rename(conversation_id: str, user_id: str, title: str) -> dict:
+    """Đổi tên hội thoại của chính người dùng. Tên rỗng hoặc toàn khoảng trắng bị từ chối (ValueError)."""
+    title = " ".join((title or "").split())[:MAX_TITLE]
+    if not title:
+        raise ValueError("Tên hội thoại không được để trống")
+    rows = query(
+        "UPDATE conversations SET title = %s WHERE id = %s AND user_id = %s "
+        "RETURNING id::text AS id, title, created_at, updated_at",
+        (title, conversation_id, user_id), True,
+    )
+    if not rows:
+        raise ConversationNotFound(conversation_id)
+    return _public(rows[0])
+
+
+def drop_last_exchange(conversation_id: str, text: str) -> bool:
+    """Chuẩn bị "sinh lại": xóa lượt hỏi-đáp cuối nếu câu hỏi cuối đúng là `text`.
+    Cũng xử lý trường hợp lượt cuối bị dừng giữa chừng (chỉ có câu hỏi, chưa có câu trả lời).
+    Không khớp thì không xóa gì (tránh xóa nhầm khi client gửi sai) và trả False."""
+    rows = query(
+        "SELECT id, role, content FROM messages WHERE conversation_id = %s ORDER BY id DESC LIMIT 2",
+        (conversation_id,),
+    )
+    if rows and rows[0]["role"] == "user" and rows[0]["content"] == text:
+        doomed = [rows[0]["id"]]
+    elif (len(rows) == 2 and rows[0]["role"] == "ai" and rows[1]["role"] == "user"
+          and rows[1]["content"] == text):
+        doomed = [rows[0]["id"], rows[1]["id"]]
+    else:
+        return False
+    with transaction() as cur:
+        cur.execute("DELETE FROM messages WHERE id = ANY(%s)", (doomed,))  # feedback xóa theo cascade
+    return True
 
 
 def delete(conversation_id: str, user_id: str) -> bool:

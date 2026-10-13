@@ -12,6 +12,7 @@ export type Page =
   | 'Security Center'
   | 'User Management'
   | 'Groups'
+  | 'Feedback'
   | 'My Account';
 
 export type Role = 'admin' | 'user';
@@ -102,10 +103,31 @@ export type Conversation = {
 
 export type LiveStep = { step: string; status: string; detail: string };
 
+export type FeedbackSummary = {
+  up: number;
+  down: number;
+  rated: number;
+  answers: number;
+  satisfaction: number | null;
+  rating_rate: number | null;
+  recent_down: {
+    message_id: number;
+    question: string | null;
+    answer: string;
+    comment: string | null;
+    user: string;
+    sources: string[];
+    at: string;
+  }[];
+};
+
 export type ChatMessage = {
   role: 'user' | 'ai';
   text: string;
   streaming?: boolean;
+  id?: number; // id tin nhắn AI trong DB (có sau khi trả lời xong): dùng để đánh giá 👍/👎
+  feedback?: 1 | -1 | null;
+  stopped?: boolean; // người dùng bấm Dừng: chỉ còn phần chữ đã nhận, không được lưu
   meta?: {
     model?: string;
     latency_ms?: number;

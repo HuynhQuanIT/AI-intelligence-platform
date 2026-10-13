@@ -15,6 +15,7 @@ export function useChat({ refresh, setErr }: Options) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [liveStep, setLiveStep] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const { refreshUser } = useAuth(); // nạp lại hạn mức còn lại sau mỗi lượt chat
 
@@ -41,7 +42,10 @@ export function useChat({ refresh, setErr }: Options) {
 
     try {
       const rows = await api('/conversations/' + id + '/messages');
-      setChat(rows.map((m: any) => ({ role: m.role, text: m.text, meta: m.meta })));
+      setChat(rows.map((m: any) => ({
+        role: m.role, text: m.text, meta: m.meta,
+        id: m.role === 'ai' ? m.id : undefined, feedback: m.feedback ?? null,
+      })));
       setActiveId(id);
       setErr('');
     } catch (error: any) {
@@ -82,15 +86,61 @@ export function useChat({ refresh, setErr }: Options) {
     });
   }
 
-  async function send() {
-    const message = q.trim();
+  // Đổi tên hội thoại (đổi ngay trên giao diện, lỗi thì nạp lại danh sách).
+  async function renameConversation(id: string, title: string) {
+    const name = title.trim();
+    if (!name) return;
+    try {
+      const updated = await api('/conversations/' + id, { method: 'PUT', body: JSON.stringify({ title: name }) });
+      setConversations((list) => list.map((c) => (c.id === id ? { ...c, title: updated.title } : c)));
+    } catch (error: any) {
+      setErr('Không đổi được tên: ' + error.message);
+      loadConversations();
+    }
+  }
+
+  // 👍/👎: bấm lại đúng nút đang chọn thì bỏ đánh giá. Cập nhật ngay, lỗi thì hoàn lại.
+  async function rate(index: number, value: 1 | -1) {
+    const target = chat[index];
+    if (!target?.id) return;
+    const next = target.feedback === value ? 0 : value;
+    const before = target.feedback ?? null;
+    const apply = (feedback: 1 | -1 | null) =>
+      setChat((cur) => cur.map((m) => (m.id === target.id ? { ...m, feedback } : m)));
+    apply(next === 0 ? null : next);
+    try {
+      await api('/messages/' + target.id + '/feedback', { method: 'PUT', body: JSON.stringify({ rating: next }) });
+    } catch (error: any) {
+      apply(before);
+      setErr('Không lưu được đánh giá: ' + error.message);
+    }
+  }
+
+  function stop() {
+    abortRef.current?.abort();
+  }
+
+  // Sinh lại câu trả lời cuối: server xóa lượt hỏi-đáp cuối rồi trả lời lại cùng câu hỏi.
+  function regenerate() {
+    if (sending || chat.length < 2) return;
+    const last = chat[chat.length - 1];
+    const asked = chat[chat.length - 2];
+    if (last.role !== 'ai' || asked.role !== 'user') return;
+    setChat((cur) => cur.slice(0, -2));
+    void send(asked.text, true);
+  }
+
+  async function send(override?: string, regenerating = false) {
+    const message = (override ?? q).trim();
 
     if (!message || sending) {
       return;
     }
 
-    setQ('');
+    if (override === undefined) setQ('');
     setErr('');
+    const controller = new AbortController();
+    abortRef.current = controller;
     setSending(true);
     setLiveStep('');
 
@@ -116,7 +166,9 @@ export function useChat({ refresh, setErr }: Options) {
           message,
           use_rag: useRag,
           conversation_id: conversationId,
+          regenerate: regenerating,
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -135,7 +187,7 @@ export function useChat({ refresh, setErr }: Options) {
           patchLast((m) => ({ ...m, text: m.text + data.delta }));
         } else if (event === 'done') {
           finished = true;
-          patchLast(() => ({ role: 'ai', text: data.answer, meta: data }));
+          patchLast(() => ({ role: 'ai', text: data.answer, meta: data, id: data.message_id, feedback: null }));
         } else if (event === 'error') {
           throw new Error(data.detail || 'Stream error');
         }
@@ -147,16 +199,19 @@ export function useChat({ refresh, setErr }: Options) {
 
       await Promise.all([refresh(), loadConversations(), refreshUser()]);
     } catch (error: any) {
-      // Bỏ bong bóng AI đang dở; tin nhắn người dùng vẫn được lưu trong hội thoại.
-      setChat((current) =>
-        current.length && current[current.length - 1].streaming
-          ? current.slice(0, -1)
-          : current
-      );
-      setErr('Chat request failed: ' + error.message);
+      const aborted = error?.name === 'AbortError';
+      setChat((current) => {
+        const last = current[current.length - 1];
+        if (!last?.streaming) return current;
+        // Dừng: giữ phần chữ đã nhận (đánh dấu đã dừng); không có chữ nào thì bỏ bong bóng.
+        if (aborted && last.text) return [...current.slice(0, -1), { role: 'ai', text: last.text, stopped: true }];
+        return current.slice(0, -1);
+      });
+      if (!aborted) setErr('Chat request failed: ' + error.message);
       loadConversations();
       refreshUser();
     } finally {
+      abortRef.current = null;
       setSending(false);
       setLiveStep('');
     }
@@ -164,6 +219,6 @@ export function useChat({ refresh, setErr }: Options) {
 
   return {
     q, setQ, chat, useRag, setUseRag, sending, conversations, activeId, liveStep, messagesRef,
-    openConversation, newConversation, removeConversation, send,
+    openConversation, newConversation, removeConversation, renameConversation, send, stop, regenerate, rate,
   };
 }

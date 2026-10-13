@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from ..core.db import query
 from .access import PUBLIC_ONLY, visible_sql
-from . import embeddings
+from . import embeddings, rerank as reranker
 from .text import keywords, normalize_text, words
 
 logger = logging.getLogger(__name__)
@@ -102,6 +102,10 @@ LEXICAL_MIN_SCORE = float(os.getenv("LEXICAL_MIN_SCORE", "0.5"))
 LEXICAL_ALONE_MIN_SCORE = float(os.getenv("LEXICAL_ALONE_MIN_SCORE", "1.0"))
 
 
+# Chế độ chỉ từ khóa (chưa bật embeddings): tỉ lệ từ khóa câu hỏi tối thiểu phải khớp.
+KEYWORD_ONLY_MIN_SCORE = float(os.getenv("KEYWORD_ONLY_MIN_SCORE", "0.6"))
+
+
 @lru_cache(maxsize=256)
 def _query_vector(question: str) -> str:
     """Nhớ vector của câu hỏi đã hỏi: giảm lượt gọi API embedding (hạn mức) và độ trễ.
@@ -159,24 +163,33 @@ def _describe_error(exc) -> str:
     return type(exc).__name__ + (f" {code}" if code else "")
 
 
-def retrieve_ex(question, limit=4, viewer=PUBLIC_ONLY):
+POOL_FACTOR = 3  # lấy rộng limit*3 ứng viên rồi xếp hạng lại
+
+
+def retrieve_ex(question, limit=4, viewer=PUBLIC_ONLY, rerank=None):
     """
     Hybrid: từ khóa + vector, gộp bằng Reciprocal Rank Fusion có trọng số.
     Trả (kết quả, info). info cho biết đã dùng cách nào và vì sao quay về từ khóa,
     để trace không che giấu việc vector search bị lỗi.
     """
-    lexical = retrieve_lexical(question, limit * 3, viewer)
+    lexical = retrieve_lexical(question, limit * POOL_FACTOR, viewer)
 
     if not embeddings.enabled():
-        return lexical[:limit], {"mode": "keyword", "reason": "embeddings disabled"}
+        # Không có vector để kiểm tra độ liên quan: chỉ tin đoạn khớp đủ tỉ lệ từ khóa của câu hỏi,
+        # nếu không câu ngoài phạm vi vẫn "khớp" vài từ chung (bao nhiêu, hôm nay...) và bị trả nguồn sai.
+        lexical = [i for i in lexical if i["score"] >= KEYWORD_ONLY_MIN_SCORE]
+        top, used = reranker.rerank(question, lexical, limit, rerank)
+        return top, {"mode": "keyword", "reason": "embeddings disabled", "rerank": used}
 
     try:
-        semantic = near_top(retrieve_vector(question, limit * 3, viewer))
+        semantic = near_top(retrieve_vector(question, limit * POOL_FACTOR, viewer))
     except Exception as exc:
         logger.exception("Vector search failed; falling back to lexical retrieval")
-        return lexical[:limit], {
+        top, used = reranker.rerank(question, lexical, limit, rerank)
+        return top, {
             "mode": "keyword",
             "reason": "vector search failed: " + _describe_error(exc),
+            "rerank": used,
         }
 
     lexical_min = LEXICAL_MIN_SCORE if semantic else max(LEXICAL_MIN_SCORE, LEXICAL_ALONE_MIN_SCORE)
@@ -204,11 +217,12 @@ def retrieve_ex(question, limit=4, viewer=PUBLIC_ONLY):
             if item.get("similarity") is not None:
                 entry["similarity"] = item["similarity"]
 
-    ranked = sorted(fused.values(), key=lambda e: e["score"], reverse=True)[:limit]
+    ranked = sorted(fused.values(), key=lambda e: e["score"], reverse=True)
     for entry in ranked:
         entry["score"] = round(entry["score"], 4)
+    ranked, used = reranker.rerank(question, ranked[: limit * POOL_FACTOR], limit, rerank)
 
-    return ranked, {"mode": "hybrid", "reason": ""}
+    return ranked, {"mode": "hybrid", "reason": "", "rerank": used}
 
 
 def retrieve(question, limit=4, viewer=PUBLIC_ONLY):

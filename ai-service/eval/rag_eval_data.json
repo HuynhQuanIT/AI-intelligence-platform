@@ -1,0 +1,347 @@
+{
+ "description": "Bộ kiểm thử chất lượng truy xuất RAG. Sửa file này để thêm tài liệu/câu hỏi; chạy: python -m eval.run_rag_eval",
+ "documents": [
+  {
+   "title": "Quy chế nghỉ phép năm",
+   "content": "Nhân viên chính thức được hưởng 12 ngày phép năm, cộng thêm 1 ngày cho mỗi 5 năm thâm niên. Nhân viên đăng ký nghỉ phép trước 3 ngày làm việc qua hệ thống nhân sự và chờ trưởng bộ phận duyệt.\n\nPhép năm chưa dùng hết được chuyển sang quý I của năm sau, tối đa 5 ngày; phần vượt quá sẽ mất. Nghỉ không lương tối đa 30 ngày trong một năm và phải được giám đốc phê duyệt bằng văn bản."
+  },
+  {
+   "title": "Chính sách nghỉ ốm và thai sản",
+   "content": "Nhân viên nghỉ ốm có giấy xác nhận của bệnh viện được hưởng 75% lương, tối đa 30 ngày mỗi năm. Giấy xác nhận phải nộp cho phòng nhân sự trong vòng 3 ngày làm việc sau khi đi làm lại.\n\nNhân viên nữ nghỉ thai sản 6 tháng và được giữ nguyên vị trí công việc. Nhân viên nam được nghỉ 5 ngày khi vợ sinh con, hưởng nguyên lương."
+  },
+  {
+   "title": "Hướng dẫn bảo trì máy nén khí",
+   "content": "Kỹ thuật viên kiểm tra áp suất máy nén khí mỗi ngày trước ca làm việc và ghi vào nhật ký. Lọc dầu của máy nén khí được thay mỗi 2000 giờ vận hành.\n\nNước đọng trong bình chứa phải được xả hằng tuần để tránh gỉ sét. Bảo dưỡng tổng thể máy nén khí do kỹ thuật viên của hãng thực hiện mỗi quý, kết quả ghi vào phiếu BT-03."
+  },
+  {
+   "title": "Hướng dẫn bảo trì máy phát điện",
+   "content": "Máy phát điện dự phòng được chạy thử không tải 15 phút mỗi tháng để bảo đảm khởi động tốt. Dầu nhớt máy phát điện được thay mỗi 250 giờ chạy.\n\nẮc quy máy phát điện kiểm tra mỗi quý. Bình nhiên liệu luôn được giữ trên 50% dung tích. Mọi lần bảo trì ghi vào phiếu BT-07, bảo dưỡng tổng thể được thực hiện hằng năm."
+  },
+  {
+   "title": "Quy trình mua sắm và phê duyệt chi phí",
+   "content": "Khoản chi dưới 5 triệu đồng do trưởng bộ phận phê duyệt. Khoản từ 5 triệu đến 50 triệu đồng cần giám đốc tài chính phê duyệt, khoản trên 50 triệu đồng phải qua hội đồng.\n\nMua sắm trên 20 triệu đồng yêu cầu ba báo giá từ các nhà cung cấp khác nhau. Người tạm ứng phải hoàn ứng trong 7 ngày kể từ ngày chi."
+  },
+  {
+   "title": "Chính sách công tác phí",
+   "content": "Phụ cấp ăn khi đi công tác trong nước là 200.000 đồng mỗi ngày. Tiền khách sạn tối đa 1.200.000 đồng mỗi đêm tại Hà Nội và TP.HCM, 800.000 đồng mỗi đêm tại các tỉnh khác.\n\nVé máy bay hạng phổ thông và đặt trước 7 ngày. Nhân viên phải quyết toán công tác phí trong 5 ngày làm việc sau chuyến đi."
+  },
+  {
+   "title": "Quy định an toàn thông tin",
+   "content": "Mật khẩu tài khoản công ty tối thiểu 12 ký tự và phải đổi sau mỗi 90 ngày. Xác thực hai lớp là bắt buộc với VPN và email. Không được cắm USB cá nhân vào máy công ty.\n\nMọi sự cố an toàn thông tin phải báo về security@congty.vn trong vòng 2 giờ. Dữ liệu được sao lưu hằng đêm lúc 2 giờ sáng và lưu giữ 30 ngày."
+  },
+  {
+   "title": "Onboarding nhân viên mới",
+   "content": "Ngày đầu đi làm, nhân viên mới nhận laptop và thẻ ra vào, được giới thiệu với đồng nghiệp và người hướng dẫn (buddy). Tuần đầu tiên tham gia khóa đào tạo an toàn lao động.\n\nThời gian thử việc là 2 tháng, nhân viên thử việc hưởng 85% lương. Cuối tháng thứ hai quản lý trực tiếp đánh giá kết quả thử việc."
+  },
+  {
+   "title": "Cẩm nang chăm sóc khách hàng",
+   "content": "Email của khách hàng phải được phản hồi trong 4 giờ làm việc. Khiếu nại nghiêm trọng phải chuyển cho trưởng nhóm trong 30 phút.\n\nKhách hàng được hoàn tiền trong 14 ngày kể từ ngày mua nếu sản phẩm chưa sử dụng. Sản phẩm được bảo hành 12 tháng. Hotline 1900 1234 hoạt động từ 8h đến 20h mỗi ngày."
+  },
+  {
+   "title": "Remote Work Guidelines",
+   "content": "Employees may work remotely up to 3 days per week with manager approval. Core hours are 10:00 to 15:00 local time, when everyone must be reachable.\n\nA VPN connection is required for all remote sessions. The company provides an equipment stipend of 300 USD per year. The weekly team sync is held every Monday at 9:30."
+  },
+  {
+   "title": "Kế hoạch ứng phó sự cố cháy nổ",
+   "content": "Khi phát hiện cháy, hô to báo động, bấm chuông báo cháy và gọi 114. Mọi người sơ tán bằng cầu thang bộ, không dùng thang máy, và tập kết tại sân trước tòa nhà.\n\nBình chữa cháy được kiểm tra hằng tháng. Công ty tổ chức diễn tập phòng cháy chữa cháy hai lần mỗi năm."
+  },
+  {
+   "title": "Quy trình tuyển dụng",
+   "content": "Phòng nhân sự sàng lọc hồ sơ trong 5 ngày kể từ khi đăng tin. Ứng viên qua hai vòng phỏng vấn gồm vòng chuyên môn và vòng văn hóa, sau đó nhận thư mời trong 3 ngày.\n\nNhân viên giới thiệu ứng viên được thưởng 3.000.000 đồng khi người được giới thiệu hoàn thành thử việc."
+  }
+ ],
+ "questions": [
+  {
+   "q": "Nhân viên được nghỉ phép năm bao nhiêu ngày?",
+   "doc": "Quy chế nghỉ phép năm",
+   "fact": "12 ngày phép năm",
+   "tier": "lexical"
+  },
+  {
+   "q": "Phép năm chưa dùng hết có được chuyển sang năm sau không?",
+   "doc": "Quy chế nghỉ phép năm",
+   "fact": "tối đa 5 ngày",
+   "tier": "lexical"
+  },
+  {
+   "q": "Nghỉ không lương tối đa bao nhiêu ngày một năm?",
+   "doc": "Quy chế nghỉ phép năm",
+   "fact": "30 ngày",
+   "tier": "lexical"
+  },
+  {
+   "q": "Nghỉ ốm có giấy bệnh viện được hưởng bao nhiêu phần trăm lương?",
+   "doc": "Chính sách nghỉ ốm và thai sản",
+   "fact": "75%",
+   "tier": "lexical"
+  },
+  {
+   "q": "Chồng được nghỉ mấy ngày khi vợ sinh con?",
+   "doc": "Chính sách nghỉ ốm và thai sản",
+   "fact": "5 ngày",
+   "tier": "lexical"
+  },
+  {
+   "q": "Nghỉ thai sản kéo dài bao lâu?",
+   "doc": "Chính sách nghỉ ốm và thai sản",
+   "fact": "6 tháng",
+   "tier": "lexical"
+  },
+  {
+   "q": "Bao lâu thì thay lọc dầu máy nén khí?",
+   "doc": "Hướng dẫn bảo trì máy nén khí",
+   "fact": "2000 giờ",
+   "tier": "lexical"
+  },
+  {
+   "q": "Máy nén khí cần xả nước đọng bình chứa khi nào?",
+   "doc": "Hướng dẫn bảo trì máy nén khí",
+   "fact": "hằng tuần",
+   "tier": "lexical"
+  },
+  {
+   "q": "Máy phát điện chạy thử không tải bao lâu mỗi tháng?",
+   "doc": "Hướng dẫn bảo trì máy phát điện",
+   "fact": "15 phút",
+   "tier": "lexical"
+  },
+  {
+   "q": "Khi nào thay dầu nhớt máy phát điện?",
+   "doc": "Hướng dẫn bảo trì máy phát điện",
+   "fact": "250 giờ",
+   "tier": "lexical"
+  },
+  {
+   "q": "Phiếu bảo trì máy phát điện mã nào?",
+   "doc": "Hướng dẫn bảo trì máy phát điện",
+   "fact": "BT-07",
+   "tier": "lexical"
+  },
+  {
+   "q": "Mức nhiên liệu tối thiểu trong bình của máy phát điện?",
+   "doc": "Hướng dẫn bảo trì máy phát điện",
+   "fact": "50%",
+   "tier": "lexical"
+  },
+  {
+   "q": "Khoản chi dưới 5 triệu ai là người phê duyệt?",
+   "doc": "Quy trình mua sắm và phê duyệt chi phí",
+   "fact": "trưởng bộ phận",
+   "tier": "lexical"
+  },
+  {
+   "q": "Mua sắm trên 20 triệu cần mấy báo giá?",
+   "doc": "Quy trình mua sắm và phê duyệt chi phí",
+   "fact": "ba báo giá",
+   "tier": "lexical"
+  },
+  {
+   "q": "Hoàn ứng trong bao nhiêu ngày?",
+   "doc": "Quy trình mua sắm và phê duyệt chi phí",
+   "fact": "7 ngày",
+   "tier": "lexical"
+  },
+  {
+   "q": "Phụ cấp ăn khi công tác trong nước là bao nhiêu?",
+   "doc": "Chính sách công tác phí",
+   "fact": "200.000",
+   "tier": "lexical"
+  },
+  {
+   "q": "Giá khách sạn tối đa mỗi đêm ở Hà Nội?",
+   "doc": "Chính sách công tác phí",
+   "fact": "1.200.000",
+   "tier": "lexical"
+  },
+  {
+   "q": "Quyết toán công tác phí trong bao nhiêu ngày làm việc?",
+   "doc": "Chính sách công tác phí",
+   "fact": "5 ngày làm việc",
+   "tier": "lexical"
+  },
+  {
+   "q": "Mật khẩu tối thiểu bao nhiêu ký tự?",
+   "doc": "Quy định an toàn thông tin",
+   "fact": "12 ký tự",
+   "tier": "lexical"
+  },
+  {
+   "q": "Sự cố an toàn thông tin phải báo trong bao lâu?",
+   "doc": "Quy định an toàn thông tin",
+   "fact": "2 giờ",
+   "tier": "lexical"
+  },
+  {
+   "q": "Dữ liệu được sao lưu lúc mấy giờ và giữ bao lâu?",
+   "doc": "Quy định an toàn thông tin",
+   "fact": "2 giờ sáng",
+   "tier": "lexical"
+  },
+  {
+   "q": "Thử việc hưởng bao nhiêu phần trăm lương?",
+   "doc": "Onboarding nhân viên mới",
+   "fact": "85%",
+   "tier": "lexical"
+  },
+  {
+   "q": "Ngày đầu đi làm nhân viên mới nhận những gì?",
+   "doc": "Onboarding nhân viên mới",
+   "fact": "laptop",
+   "tier": "lexical"
+  },
+  {
+   "q": "Thời hạn hoàn tiền cho khách hàng là bao nhiêu ngày?",
+   "doc": "Cẩm nang chăm sóc khách hàng",
+   "fact": "14 ngày",
+   "tier": "lexical"
+  },
+  {
+   "q": "Hotline chăm sóc khách hàng hoạt động mấy giờ?",
+   "doc": "Cẩm nang chăm sóc khách hàng",
+   "fact": "8h",
+   "tier": "lexical"
+  },
+  {
+   "q": "Khiếu nại nghiêm trọng chuyển cho trưởng nhóm trong bao lâu?",
+   "doc": "Cẩm nang chăm sóc khách hàng",
+   "fact": "30 phút",
+   "tier": "lexical"
+  },
+  {
+   "q": "How many days per week can employees work remotely?",
+   "doc": "Remote Work Guidelines",
+   "fact": "3 days",
+   "tier": "lexical"
+  },
+  {
+   "q": "What are the core hours for remote work?",
+   "doc": "Remote Work Guidelines",
+   "fact": "10:00",
+   "tier": "lexical"
+  },
+  {
+   "q": "How much is the yearly equipment stipend?",
+   "doc": "Remote Work Guidelines",
+   "fact": "300 USD",
+   "tier": "lexical"
+  },
+  {
+   "q": "Khi có cháy gọi số điện thoại nào?",
+   "doc": "Kế hoạch ứng phó sự cố cháy nổ",
+   "fact": "114",
+   "tier": "lexical"
+  },
+  {
+   "q": "Diễn tập phòng cháy mấy lần một năm?",
+   "doc": "Kế hoạch ứng phó sự cố cháy nổ",
+   "fact": "hai lần",
+   "tier": "lexical"
+  },
+  {
+   "q": "Thưởng giới thiệu ứng viên là bao nhiêu?",
+   "doc": "Quy trình tuyển dụng",
+   "fact": "3.000.000",
+   "tier": "lexical"
+  },
+  {
+   "q": "Phỏng vấn tuyển dụng gồm mấy vòng?",
+   "doc": "Quy trình tuyển dụng",
+   "fact": "hai vòng phỏng vấn",
+   "tier": "lexical"
+  },
+  {
+   "q": "Tôi có thể làm việc từ nhà mấy buổi mỗi tuần?",
+   "doc": "Remote Work Guidelines",
+   "fact": "3 days",
+   "tier": "semantic"
+  },
+  {
+   "q": "Số ngày nghỉ hằng năm có lương của tôi là bao nhiêu?",
+   "doc": "Quy chế nghỉ phép năm",
+   "fact": "12 ngày phép năm",
+   "tier": "semantic"
+  },
+  {
+   "q": "Vợ tôi sắp sinh thì tôi được xin nghỉ không?",
+   "doc": "Chính sách nghỉ ốm và thai sản",
+   "fact": "5 ngày",
+   "tier": "semantic"
+  },
+  {
+   "q": "Thiết bị cấp điện dự phòng cần kiểm tra định kỳ ra sao?",
+   "doc": "Hướng dẫn bảo trì máy phát điện",
+   "fact": "15 phút",
+   "tier": "semantic"
+  },
+  {
+   "q": "Đi công tác thì tiền ngủ khách sạn được thanh toán tối đa bao nhiêu?",
+   "doc": "Chính sách công tác phí",
+   "fact": "1.200.000",
+   "tier": "semantic"
+  },
+  {
+   "q": "Khách muốn trả lại hàng thì trong bao lâu được lấy lại tiền?",
+   "doc": "Cẩm nang chăm sóc khách hàng",
+   "fact": "14 ngày",
+   "tier": "semantic"
+  },
+  {
+   "q": "Máy tính bị nhiễm mã độc thì phải báo cáo thế nào?",
+   "doc": "Quy định an toàn thông tin",
+   "fact": "2 giờ",
+   "tier": "semantic"
+  },
+  {
+   "q": "Giới thiệu bạn bè vào công ty có được thưởng không?",
+   "doc": "Quy trình tuyển dụng",
+   "fact": "3.000.000",
+   "tier": "semantic"
+  },
+  {
+   "q": "Giá vàng hôm nay là bao nhiêu?",
+   "doc": null,
+   "fact": null,
+   "tier": "negative"
+  },
+  {
+   "q": "Thủ đô của nước Pháp là gì?",
+   "doc": null,
+   "fact": null,
+   "tier": "negative"
+  },
+  {
+   "q": "Cách nấu phở bò cho ngon",
+   "doc": null,
+   "fact": null,
+   "tier": "negative"
+  },
+  {
+   "q": "Kết quả trận bóng đá tối qua thế nào?",
+   "doc": null,
+   "fact": null,
+   "tier": "negative"
+  },
+  {
+   "q": "Viết hàm đệ quy tính giai thừa bằng Python",
+   "doc": null,
+   "fact": null,
+   "tier": "negative"
+  },
+  {
+   "q": "Dự báo thời tiết ngày mai ra sao?",
+   "doc": null,
+   "fact": null,
+   "tier": "negative"
+  }
+ ],
+ "thresholds": {
+  "lexical": {
+   "hit@4": 0.9,
+   "mrr": 0.8,
+   "fact_recall": 0.85
+  },
+  "negative": {
+   "rejection": 0.8
+  }
+ }
+}

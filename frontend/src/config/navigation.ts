@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Search,
   ShieldCheck,
+  ThumbsUp,
   UserCircle,
   UserCog,
   Users,
@@ -33,6 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { name: 'Security Center', icon: ShieldCheck, group: 'OBSERVE', roles: ['admin'] },
   { name: 'User Management', icon: Users, group: 'ADMIN', roles: ['admin'] },
   { name: 'Groups', icon: UserCog, group: 'ADMIN', roles: ['admin'] },
+  { name: 'Feedback', icon: ThumbsUp, group: 'ADMIN', roles: ['admin'] },
   { name: 'My Account', icon: UserCircle, group: 'ACCOUNT', roles: ALL },
 ];
 
@@ -56,5 +58,6 @@ export const PAGE_DESCRIPTIONS: Record<Page, string> = {
   'Security Center': 'Scan suspicious prompts and review events.',
   'User Management': 'Approve accounts, manage roles, quotas and sign-in.',
   Groups: 'Group users and control who can read which documents.',
+  Feedback: 'See how users rate the chatbot answers and which ones need fixing.',
   'My Account': 'Your usage quota and password.',
 };

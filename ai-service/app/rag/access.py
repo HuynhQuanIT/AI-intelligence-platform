@@ -19,6 +19,11 @@ def viewer_of(user: dict) -> dict:
 def visible_sql(viewer: dict | None, alias: str = "d") -> tuple[str, tuple]:
     """Trả (điều kiện SQL, tham số) để ghép vào WHERE của truy vấn trên bảng documents."""
     viewer = viewer or PUBLIC_ONLY
+    only = viewer.get("only_docs")
+    if only is not None:
+        # Thu hẹp phạm vi (bộ kiểm thử RAG): chỉ xét đúng các tài liệu này, ngoài ra vẫn theo quy tắc quyền.
+        base, params = visible_sql({k: v for k, v in viewer.items() if k != "only_docs"}, alias)
+        return f"({base} AND {alias}.id = ANY(%s::uuid[]))", (*params, list(only))
     if viewer.get("admin"):
         return "TRUE", ()
 

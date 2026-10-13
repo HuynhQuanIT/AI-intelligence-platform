@@ -16,6 +16,7 @@ import SecurityCenter from './pages/SecurityCenter';
 import Account from './pages/Account';
 import GroupManagement from './pages/GroupManagement';
 import DocumentSearch from './pages/DocumentSearch';
+import Feedback from './pages/Feedback';
 import UserManagement from './pages/UserManagement';
 import type { Page, User } from './types';
 
@@ -103,6 +104,7 @@ export default function Workspace({ user }: { user: User }) {
           )}
           {page === 'User Management' && isAdmin && <UserManagement setErr={setErr} />}
           {page === 'Groups' && isAdmin && <GroupManagement setErr={setErr} refresh={refresh} />}
+          {page === 'Feedback' && isAdmin && <Feedback setErr={setErr} />}
           {page === 'My Account' && <Account />}
         </article>
       </main>

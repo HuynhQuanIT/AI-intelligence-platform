@@ -18,6 +18,10 @@ public static class ConversationEndpoints
             async (string conversationId, IHttpClientFactory f) =>
                 await AiProxy.Get(f, $"/conversations/{Uri.EscapeDataString(conversationId)}/messages"));
 
+        group.MapPut("/{conversationId}",
+            async (string conversationId, HttpRequest r, IHttpClientFactory f) =>
+                await AiProxy.Put(r, f, $"/conversations/{Uri.EscapeDataString(conversationId)}"));
+
         group.MapDelete("/{conversationId}",
             async (string conversationId, IHttpClientFactory f) =>
                 await AiProxy.Delete(f, $"/conversations/{Uri.EscapeDataString(conversationId)}"));

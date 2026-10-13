@@ -25,6 +25,7 @@ app.MapChatEndpoints();
 app.MapConversationEndpoints();
 app.MapDocumentEndpoints();
 app.MapSearchEndpoints();
+app.MapFeedbackEndpoints();
 app.MapMonitoringEndpoints();
 app.MapSecurityEndpoints();
 

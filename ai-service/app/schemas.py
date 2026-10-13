@@ -25,6 +25,17 @@ class Chat(BaseModel):
     history: list[HistoryItem] = Field(default_factory=list, max_length=20)
     # Có conversation_id thì server lưu tin nhắn và lấy lịch sử từ database (bỏ qua history do client gửi).
     conversation_id: str | None = None
+    # Sinh lại câu trả lời cho `message`: server xóa lượt hỏi-đáp cuối (nếu đúng câu này) rồi trả lời lại.
+    regenerate: bool = False
+
+
+class Rename(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
+class Feedback(BaseModel):
+    rating: int = Field(ge=-1, le=1)  # 1 = 👍, -1 = 👎, 0 = bỏ đánh giá
+    comment: str | None = Field(default=None, max_length=1000)
 
 
 class EmailBody(BaseModel):

@@ -1,6 +1,7 @@
 """Quản lý cuộc trò chuyện."""
 from fastapi import APIRouter, Depends, HTTPException
 
+from ..schemas import Rename
 from ..services import conversations
 from .deps import current_user
 
@@ -23,6 +24,16 @@ def conversation_messages(conversation_id: str, user: dict = Depends(current_use
         return conversations.messages(conversations.parse_id(conversation_id), user["id"])
     except conversations.ConversationNotFound:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+
+@router.put("/conversations/{conversation_id}")
+def rename_conversation(conversation_id: str, b: Rename, user: dict = Depends(current_user)):
+    try:
+        return conversations.rename(conversations.parse_id(conversation_id), user["id"], b.title)
+    except conversations.ConversationNotFound:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.delete("/conversations/{conversation_id}")

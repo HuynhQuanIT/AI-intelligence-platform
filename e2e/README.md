@@ -2,7 +2,8 @@
 
 Chạy trình duyệt thật qua toàn bộ chuỗi `Vite preview -> ASP.NET gateway -> ai-service -> PostgreSQL`:
 đăng ký + OTP, duyệt tài khoản, cookie refresh httpOnly, tải lại trang, đổi/quên mật khẩu, hạn mức,
-nhóm và phân quyền tài liệu, admin đổi email/xóa tài khoản.
+nhóm và phân quyền tài liệu, admin đổi email/xóa tài khoản, upload bất đồng bộ, tìm kiếm tài liệu,
+👍/👎 + sinh lại + đổi tên hội thoại + trang Feedback, nút Dừng.
 
 CI chạy tự động (job `e2e` trong `.github/workflows/ci.yml`). Chạy tay trên máy bạn:
 

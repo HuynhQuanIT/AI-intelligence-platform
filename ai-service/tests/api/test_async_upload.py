@@ -86,3 +86,31 @@ def test_stale_processing_is_marked_failed(client):
         assert row(client, did)["status"] == "processed"
     finally:
         client.delete(f"/documents/{did}")
+
+
+def test_xlsx_and_pptx_upload_end_to_end_and_are_searchable(client):
+    import sys
+    sys.path.insert(0, "tests")
+    from test_extract_formats import make_pptx
+    from openpyxl import Workbook
+    import io
+    token = uuid.uuid4().hex[:8]
+    wb = Workbook(); ws = wb.active
+    ws.append(["Sản phẩm", "Mã hàng"]); ws.append(["Máy bơm", f"MH{token}"])
+    buf = io.BytesIO(); wb.save(buf)
+    ids = []
+    try:
+        for name, data, mime in [
+            (f"bang-{token}.xlsx", buf.getvalue(), "application/octet-stream"),
+            (f"slide-{token}.pptx", make_pptx(), "application/octet-stream"),
+        ]:
+            r = client.post("/documents/upload", files={"file": (name, data, mime)})
+            assert r.status_code == 202, r.text
+            ids.append(r.json()["id"])
+        assert row(client, ids[0])["status"] == "processed"
+        hit = client.get("/search", params={"q": f"MH{token}", "mode": "keyword"}).json()
+        assert ids[0] in {d["document_id"] for d in hit["results"]}
+        assert row(client, ids[1])["status"] == "processed"
+    finally:
+        for did in ids:
+            client.delete(f"/documents/{did}")

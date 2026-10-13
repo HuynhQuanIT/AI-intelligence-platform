@@ -285,3 +285,64 @@ test('tìm kiếm tài liệu theo nội dung, tô sáng từ khóa, bấm kết
 
   await expect(admin.locator('.document-chunk.focused')).toContainText(token);
 });
+
+test('chatbot: 👍/👎 lưu lại sau khi tải lại, sinh lại câu trả lời, đổi tên hội thoại, admin thấy 👎 ở trang Feedback', async ({ browser }) => {
+  const { page } = await newSession(browser);
+  await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await openPage(page, 'AI Playground');
+
+  const question = 'Câu hỏi đánh giá ' + Date.now().toString(36);
+  await page.getByPlaceholder('Message your AI assistant...').fill(question);
+  await page.getByRole('button', { name: 'Gửi', exact: true }).click();
+  const answer = page.locator('.bubble.ai').last();
+  await expect(answer.getByRole('button', { name: 'Câu trả lời tốt' })).toBeVisible({ timeout: 20000 });
+
+  await answer.getByRole('button', { name: 'Câu trả lời tốt' }).click();
+  await expect(answer.getByRole('button', { name: 'Câu trả lời tốt' })).toHaveAttribute('aria-pressed', 'true');
+  await answer.getByRole('button', { name: 'Câu trả lời chưa tốt' }).click(); // đổi ý: 👎 thay cho 👍
+  await expect(answer.getByRole('button', { name: 'Câu trả lời chưa tốt' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(answer.getByRole('button', { name: 'Câu trả lời tốt' })).toHaveAttribute('aria-pressed', 'false');
+
+  // Đổi tên hội thoại rồi tải lại trang: tên mới và đánh giá vẫn còn.
+  const renamed = 'Tên mới ' + Date.now().toString(36);
+  await page.locator('.conv-item.active').getByRole('button', { name: 'Đổi tên hội thoại' }).click();
+  await page.getByLabel('Tên hội thoại').fill(renamed);
+  await page.getByLabel('Tên hội thoại').press('Enter');
+  await expect(page.locator('.conv-item.active')).toContainText(renamed);
+  await page.reload();
+  await openPage(page, 'AI Playground');
+  await page.locator('.conv-item', { hasText: renamed }).getByRole('button').first().click();
+  const reloaded = page.locator('.bubble.ai').last();
+  await expect(reloaded.getByRole('button', { name: 'Câu trả lời chưa tốt' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Sinh lại: vẫn đúng 1 câu hỏi + 1 câu trả lời, đánh giá cũ bị xóa cùng câu trả lời cũ.
+  await reloaded.getByRole('button', { name: 'Sinh lại câu trả lời' }).click();
+  await expect(page.locator('.bubble.ai').last().getByRole('button', { name: 'Câu trả lời tốt' })).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('.bubble.user')).toHaveCount(1);
+  await expect(page.locator('.bubble.ai')).toHaveCount(1);
+  await expect(page.locator('.bubble.ai').last().getByRole('button', { name: 'Câu trả lời chưa tốt' })).toHaveAttribute('aria-pressed', 'false');
+
+  // Đánh giá lại 👎 để admin thấy trong Feedback.
+  await page.locator('.bubble.ai').last().getByRole('button', { name: 'Câu trả lời chưa tốt' }).click();
+  await openPage(page, 'Feedback');
+  await expect(page.locator('.fb-item', { hasText: question })).toBeVisible();
+});
+
+test('chatbot: nút Dừng hủy câu trả lời đang chạy và cho gửi lại', async ({ browser }) => {
+  const { page } = await newSession(browser);
+  await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await openPage(page, 'AI Playground');
+
+  // Treo yêu cầu stream để mô phỏng câu trả lời chậm.
+  await page.route('**/chat/stream', () => { /* không trả lời */ });
+  await page.getByPlaceholder('Message your AI assistant...').fill('Câu hỏi chạy rất lâu');
+  await page.getByRole('button', { name: 'Gửi', exact: true }).click();
+  const stop = page.getByRole('button', { name: 'Dừng trả lời' });
+  await expect(stop).toBeVisible();
+  await stop.click();
+
+  await expect(page.getByRole('button', { name: 'Gửi', exact: true })).toBeVisible();
+  await expect(page.locator('.error')).toHaveCount(0); // dừng chủ động không phải lỗi
+  await expect(page.getByPlaceholder('Message your AI assistant...')).toBeEnabled();
+  await page.unroute('**/chat/stream');
+});

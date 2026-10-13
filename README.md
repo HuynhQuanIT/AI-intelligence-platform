@@ -109,7 +109,9 @@ CI (`.github/workflows/ci.yml`) runs pytest against PostgreSQL + pgvector, type-
 ## Known limitations / production work
 - The Tool Agent (Gemini function calling) can call four read-only tools (list/search/read documents, calculator), enabled per tool in the `agent_tools` table; tool output passes through the Security Agent. Retries, write actions, and human approval are not implemented.
 - Embeddings need `LLM_PROVIDER=gemini`; document text is sent to Google's API to create vectors.
-- Scanned (image-only) PDFs are rejected: there is no OCR.
+- Supported uploads: `.txt .md .pdf .docx .xlsx .pptx .png .jpg .jpeg`. Images and scanned PDFs are read with Tesseract OCR (`OCR_ENABLED`, default on; `OCR_LANGS`, default `vie+eng`). The ai-service Docker image installs Tesseract with the Vietnamese pack (`--build-arg INSTALL_OCR=false` to skip); without Tesseract, images and scanned PDFs fail with a clear message. OCR quality depends on the scan.
+- Retrieval quality: `RERANKER=off|heuristic|llm` (default `heuristic`) re-ranks the top candidates; `llm` asks Gemini to score them and falls back to heuristic on any error. `python -m eval.run_rag_eval --compare off,heuristic` measures hit@1/hit@4/MRR/fact recall and the rejection rate of out-of-scope questions on `ai-service/eval/rag_eval_data.json` (47 questions; the semantic group only runs with Gemini embeddings). CI runs it and fails when a metric drops below the thresholds in that file. The set is small: a green result is a regression guard, not proof of quality on your own documents.
+- Chat answers can be rated with thumbs up/down (admins see totals and the downvoted answers under Feedback), regenerated, stopped while streaming; conversations can be renamed. A stopped answer is not saved.
 - Streaming: Gemini text streams chunk by chunk; blocked replies and Tool Agent answers arrive in one piece.
 - Redis is provisioned but not yet used for caching.
 - MinIO is optional (`--profile s3`, `STORAGE_BACKEND=s3`): its images were removed from Docker Hub and the quay.io tags are no longer reliably pullable, so uploads default to a local volume.

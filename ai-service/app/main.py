@@ -7,12 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api import (
     auth as auth_api, chat, conversations as conversations_api, documents, groups as groups_api,
-    health, monitoring, search as search_api, security,
+    feedback as feedback_api, health, monitoring, search as search_api, security,
 )
 from .core import settings
 from .core.db import init_pool
 from .rag import documents as documents_store
-from .services import auth, conversations, groups
+from .services import auth, conversations, feedback, groups
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ async def lifespan(app: FastAPI):
     conversations.ensure_schema()
     auth.ensure_schema()
     groups.ensure_schema()
+    feedback.ensure_schema()
     documents_store.ensure_schema()
     auth.bootstrap_admin()
     yield
@@ -44,5 +45,5 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
-for module in (health, auth_api, chat, conversations_api, documents, groups_api, monitoring, security, search_api):
+for module in (health, auth_api, chat, conversations_api, documents, groups_api, monitoring, security, search_api, feedback_api):
     app.include_router(module.router)

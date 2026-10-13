@@ -43,6 +43,8 @@ async def prepare_conversation(b: Chat, user_id: str):
     if not await asyncio.to_thread(conversations.exists, cid, user_id):
         raise conversations.ConversationNotFound(cid)
 
+    if b.regenerate:
+        await asyncio.to_thread(conversations.drop_last_exchange, cid, b.message)
     history = await asyncio.to_thread(conversations.recent_history, cid)
     await asyncio.to_thread(conversations.add_message, cid, "user", b.message)
     return cid, history
@@ -115,7 +117,7 @@ async def finish_chat(request_id, provider, state, latency_ms, conversation_id, 
             "trace": state["trace"],
         }
         try:
-            await asyncio.to_thread(
+            payload["message_id"] = await asyncio.to_thread(
                 conversations.add_message, conversation_id, "ai", state["answer"], meta
             )
         except Exception:
