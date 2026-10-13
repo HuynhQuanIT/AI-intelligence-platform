@@ -29,6 +29,7 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
   const [file, setFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [uploadNote, setUploadNote] = useState('');
   // Phân quyền theo nhóm (admin): danh sách nhóm, tài liệu đang sửa quyền và các nhóm đã tick.
   const [allGroups, setAllGroups] = useState<Group[]>([]);
@@ -36,9 +37,10 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
   const [accessIds, setAccessIds] = useState<Set<string>>(new Set());
   const [savingAccess, setSavingAccess] = useState(false);
   // User thường: lọc theo "tài liệu của nhóm tôi" hoặc "công khai".
-  const [scopeFilter, setScopeFilter] = useState<'all' | 'mine' | 'public'>('all');
-  const shownDocs = canEdit ? docs : docs.filter((d) =>
-    scopeFilter === 'all' ? true : scopeFilter === 'mine' ? d.scope === 'group' : d.scope === 'public');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'own' | 'mine' | 'public'>('all');
+  const [adminFilter, setAdminFilter] = useState<'all' | 'private'>('all');
+  const shownDocs = canEdit ? (adminFilter === 'private' ? docs.filter((d) => !!d.owner_id) : docs) : docs.filter((d) =>
+    scopeFilter === 'all' ? true : scopeFilter === 'own' ? !!d.mine : scopeFilter === 'mine' ? d.scope === 'group' : d.scope === 'public');
 
   // Được mở từ nơi khác: nạp tài liệu rồi cuộn tới đoạn cần xem và tô nổi bật.
   const [focusChunk, setFocusChunk] = useState<number | null>(null);
@@ -52,6 +54,16 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
     const el = focusChunk != null ? document.getElementById(`chunk-${focusChunk}`) : null;
     (el ?? document.getElementById('document-viewer'))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [selectedDoc, focusChunk]);
+
+  // Admin: file người dùng đính kèm trong chat xuất hiện bất cứ lúc nào, nên tự nạp lại danh sách định kỳ
+  // và khi quay lại tab (không cần bấm Refresh).
+  useEffect(() => {
+    if (!canEdit) return;
+    const timer = window.setInterval(() => { refreshDocs(); }, 15000);
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshDocs(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [canEdit]);
 
   // Còn tài liệu đang xử lý nền: tự hỏi lại mỗi 3 giây cho tới khi xong (processed/failed).
   const hasProcessing = docs.some((d) => d.status === 'processing');
@@ -103,7 +115,10 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
   }
 
   async function addDoc() {
+    if (adding) return; // đang index: bấm thêm lần nữa sẽ tạo bản trùng
     try {
+      setAdding(true);
+      setErr('');
       await api('/documents', {
         method: 'POST',
         body: JSON.stringify({ title, content }),
@@ -115,6 +130,8 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
       await refresh();
     } catch (error: any) {
       setErr(error.message);
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -219,9 +236,9 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
             placeholder="Paste document text..."
           />
 
-          <button className="primary" disabled={!title.trim() || !content.trim()} onClick={addDoc}>
-            <Plus size={16} />
-            Index document
+          <button className="primary" disabled={!title.trim() || !content.trim() || adding} onClick={addDoc}>
+            {adding ? <Loader2 size={16} className="spin" /> : <Plus size={16} />}
+            {adding ? 'Đang index…' : 'Index document'}
           </button>
 
           <label>Hoặc tải file lên (.pdf, .docx, .xlsx, .pptx, .txt, .md, ảnh .png/.jpg có OCR - tối đa 10 MB)</label>
@@ -265,14 +282,22 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
         </Panel>
       </div>
       ) : (
-        <p className="note">Bạn chỉ có quyền xem tài liệu. Quản trị viên mới được thêm, tải lên hoặc xóa.</p>
+        <p className="note">Bạn xem được tài liệu công khai và của nhóm mình. Muốn thêm file của riêng bạn, hãy đính kèm (nút 📎) trong AI Playground; file đó chỉ bạn và quản trị viên thấy, bạn tự xóa được. Tài liệu chung do quản trị viên quản lý.</p>
       )}
 
       {/* Indexed document list */}
       <Panel title={`Indexed documents (${shownDocs.length}${shownDocs.length !== docs.length ? `/${docs.length}` : ''})`}>
+        {canEdit && (
+          <div className="scope-filter">
+            {([['all', 'Tất cả'], ['private', 'File riêng của người dùng']] as const).map(([key, label]) => (
+              <button key={key} className={adminFilter === key ? 'secondary active' : 'secondary'}
+                onClick={() => setAdminFilter(key)}>{label}</button>
+            ))}
+          </div>
+        )}
         {!canEdit && (
           <div className="scope-filter">
-            {([['all', 'Tất cả'], ['mine', 'Của nhóm tôi'], ['public', 'Công khai']] as const).map(([k, label]) => (
+            {([['all', 'Tất cả'], ['own', 'File của tôi'], ['mine', 'Của nhóm tôi'], ['public', 'Công khai']] as const).map(([k, label]) => (
               <button key={k} className={scopeFilter === k ? 'secondary active' : 'secondary'}
                 onClick={() => setScopeFilter(k)}>{label}</button>
             ))}
@@ -294,6 +319,10 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
                   <div>
                     {doc.groups?.length ? (
                       doc.groups.map((g) => <span className="chip" key={g.id}>{g.name}</span>)
+                    ) : doc.scope === 'private' || (canEdit && doc.owner_id) ? (
+                      <span className="chip private">
+                        {doc.mine ? 'Riêng tư: chỉ bạn thấy' : `Riêng tư: của ${doc.owner_email ?? 'người dùng'} (gán nhóm để chia sẻ)`}
+                      </span>
                     ) : (
                       <span className="chip public">Công khai (mọi người đã đăng nhập)</span>
                     )}
@@ -302,7 +331,7 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
 
                 <StatusBadge status={doc.status} />
 
-                {canEdit && doc.status === 'failed' && (
+                {(canEdit || doc.mine) && doc.status === 'failed' && (
                   <button className="secondary" onClick={() => retryDoc(doc)}>
                     <RefreshCw size={15} />
                     Thử lại
@@ -329,7 +358,7 @@ export default function KnowledgeCenter({ docs, refresh, refreshDocs, setErr, ca
                   </button>
                 )}
 
-                {canEdit && (
+                {(canEdit || doc.mine) && (
                   <button className="secondary" onClick={() => deleteDoc(doc)}>
                     <Trash2 size={15} />
                     Xóa

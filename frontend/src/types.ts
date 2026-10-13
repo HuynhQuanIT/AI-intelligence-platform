@@ -127,6 +127,7 @@ export type ChatMessage = {
   streaming?: boolean;
   id?: number; // id tin nhắn AI trong DB (có sau khi trả lời xong): dùng để đánh giá 👍/👎
   feedback?: 1 | -1 | null;
+  attachment?: AttachmentRef; // file đính kèm trong câu hỏi này
   stopped?: boolean; // người dùng bấm Dừng: chỉ còn phần chữ đã nhận, không được lưu
   meta?: {
     model?: string;
@@ -147,7 +148,7 @@ export type SourceRef = {
   similarity?: number | null;
   snippet?: string;
   content?: string;
-  scope?: 'public' | 'group';
+  scope?: 'public' | 'group' | 'private';
   groups?: GroupRef[];
 };
 
@@ -163,8 +164,13 @@ export type DocumentRow = {
   size_bytes?: number | null;
   has_file?: boolean;
   groups?: GroupRef[]; // admin: mọi nhóm; user: chỉ nhóm của mình. Admin rỗng = công khai
-  scope?: 'public' | 'group'; // chỉ user thường nhận
+  scope?: 'public' | 'group' | 'private'; // chỉ user thường nhận
+  owner_id?: string | null; // có chủ = file người dùng tải lên từ khung chat (riêng tư)
+  owner_email?: string | null; // chỉ admin nhận: ai đã tải file riêng này lên
+  mine?: boolean; // user thường: tài liệu của chính mình
 };
+
+export type AttachmentRef = { document_id: string; title: string; filename?: string };
 
 export type DocumentDetail = {
   id: string;

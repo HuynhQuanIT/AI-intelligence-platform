@@ -27,6 +27,8 @@ class Chat(BaseModel):
     conversation_id: str | None = None
     # Sinh lại câu trả lời cho `message`: server xóa lượt hỏi-đáp cuối (nếu đúng câu này) rồi trả lời lại.
     regenerate: bool = False
+    # File người dùng vừa đính kèm trong khung chat (id tài liệu đã xử lý xong, của chính họ).
+    attachment_id: str | None = None
 
 
 class Rename(BaseModel):

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { BrainCircuit, Check, FileText, Pencil, Plus, RotateCw, Send, Square, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { BrainCircuit, Check, FileText, Loader2, Paperclip, Pencil, Plus, RotateCw, Send, Square, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import Markdown from '../components/Markdown';
 import QuotaBar from '../components/QuotaBar';
@@ -49,6 +49,8 @@ function Sources({ sources, onOpen }: { sources?: SourceRef[]; onOpen: Props['on
               : <span className="chip">Nhóm</span>
           ) : s.scope === 'public' ? (
             <span className="chip public">Công khai</span>
+          ) : s.scope === 'private' ? (
+            <span className="chip private">Riêng tư</span>
           ) : null}
         </div>
       ))}
@@ -78,7 +80,9 @@ export default function Playground({ refresh, setErr, onOpenDocument }: Props) {
   const {
     q, setQ, chat, useRag, setUseRag, sending, conversations, activeId, liveStep, messagesRef,
     openConversation, newConversation, removeConversation, renameConversation, send, stop, regenerate, rate,
+    attachment, setAttachment, attaching, attachFile,
   } = useChat({ refresh, setErr });
+  const fileInput = useRef<HTMLInputElement | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
 
   return (
@@ -164,7 +168,15 @@ export default function Playground({ refresh, setErr, onOpenDocument }: Props) {
               <small>{message.role === 'user' ? 'YOU' : 'AI ASSISTANT'}</small>
 
               {message.role === 'user' ? (
-                <p>{message.text}</p>
+                <>
+                  {message.attachment && (
+                    <button className="attach-chip sent" title="Mở file trong Knowledge Center"
+                      onClick={() => onOpenDocument(message.attachment!.document_id)}>
+                      <FileText size={13} /> {message.attachment.filename || message.attachment.title}
+                    </button>
+                  )}
+                  <p>{message.text}</p>
+                </>
               ) : message.text ? (
                 <Markdown text={message.text} />
               ) : (
@@ -212,7 +224,34 @@ export default function Playground({ refresh, setErr, onOpenDocument }: Props) {
           ))}
         </div>
 
+        {(attachment || attaching) && (
+          <div className="attach-bar">
+            {attaching ? (
+              <span className="attach-chip"><Loader2 size={13} className="spin" /> Đang đọc file…</span>
+            ) : attachment && (
+              <span className="attach-chip">
+                <FileText size={13} /> {attachment.filename || attachment.title}
+                <button aria-label="Bỏ file đính kèm" title="Bỏ file đính kèm" onClick={() => setAttachment(null)}>
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+            <small className="muted">File được lưu riêng tư vào Knowledge Center của bạn.</small>
+          </div>
+        )}
+
         <div className="compose">
+          <input ref={fileInput} type="file" hidden aria-label="Chọn file đính kèm"
+            accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.png,.jpg,.jpeg"
+            onChange={(event) => {
+              const f = event.target.files?.[0];
+              event.target.value = ''; // cho phép chọn lại đúng file đó lần sau
+              if (f) void attachFile(f);
+            }} />
+          <button className="icon-btn attach-btn" title="Đính kèm file để chatbot phân tích" aria-label="Đính kèm file"
+            onClick={() => fileInput.current?.click()} disabled={sending || attaching}>
+            <Paperclip size={18} />
+          </button>
           <input
             value={q}
             onChange={(event) => setQ(event.target.value)}
@@ -231,7 +270,7 @@ export default function Playground({ refresh, setErr, onOpenDocument }: Props) {
               <Square size={15} /> Dừng
             </button>
           ) : (
-            <button className="primary" onClick={() => send()} disabled={!q.trim()} aria-label="Gửi">
+            <button className="primary" onClick={() => send()} disabled={(!q.trim() && !attachment) || attaching} aria-label="Gửi">
               <Send size={17} />
             </button>
           )}

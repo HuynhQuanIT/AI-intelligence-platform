@@ -29,7 +29,7 @@ def _round(x):
     return None if x is None else round(x, 3)
 
 
-def run_eval(reranker="heuristic", data=None):
+def run_eval(reranker="heuristic", data=None, live=False):
     from app.rag import documents, embeddings
     from app.rag.access import ADMIN
     from app.rag.retrieval import retrieve_ex
@@ -38,11 +38,21 @@ def run_eval(reranker="heuristic", data=None):
     data = data or load()
     ids, by_title = [], {}
     try:
-        for doc in data["documents"]:
-            res = documents.add_document(doc["title"], doc["content"])
-            ids.append(res["id"] if "id" in res else res["document_id"])
-            by_title[doc["title"]] = ids[-1]
-        viewer = {**ADMIN, "only_docs": ids}
+        if live:
+            # Chế độ "dữ liệu thật": không nạp tài liệu mẫu, hỏi thẳng trên các tài liệu đang có trong Knowledge Center.
+            from app.core.db import query
+            by_title = {r["title"]: r["id"] for r in query(
+                "SELECT id::text AS id, title FROM documents WHERE status = 'processed'")}
+            missing = sorted({q["doc"] for q in data["questions"] if q.get("doc") and q["doc"] not in by_title})
+            if missing:
+                raise SystemExit("Không thấy tài liệu (tên phải khớp đúng title trong Knowledge Center): " + "; ".join(missing))
+            viewer = ADMIN
+        else:
+            for doc in data["documents"]:
+                res = documents.add_document(doc["title"], doc["content"])
+                ids.append(res["id"] if "id" in res else res["document_id"])
+                by_title[doc["title"]] = ids[-1]
+            viewer = {**ADMIN, "only_docs": ids}
         use_semantic = embeddings.enabled()
 
         rows = []
@@ -126,6 +136,8 @@ def markdown(results, thresholds):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--compare", default="", help="danh sách reranker, vd off,heuristic (mặc định: cấu hình hiện tại)")
+    ap.add_argument("--live", metavar="FILE", help="đo trên tài liệu THẬT đang có trong DB với bộ câu hỏi của bạn "
+                    "(xem eval/my_questions.example.json); không nạp/xóa tài liệu nào")
     ap.add_argument("--json", help="ghi kết quả đầy đủ ra file JSON")
     ap.add_argument("--summary", help="ghi thêm bảng markdown vào file (vd $GITHUB_STEP_SUMMARY)")
     args = ap.parse_args(argv)
@@ -134,11 +146,19 @@ def main(argv=None):
     from app.rag import documents
     from app.rag import rerank as rr
 
+    from app.services import auth, conversations
+
     init_pool()
+    conversations.ensure_schema()
+    auth.ensure_schema()  # documents.owner_id tham chiếu bảng users
     documents.ensure_schema()
     names = [n.strip() for n in args.compare.split(",") if n.strip()] or [rr.mode()]
     data = load()
-    results = [run_eval(n, data) for n in names]
+    if args.live:
+        mine = json.loads(Path(args.live).read_text(encoding="utf-8"))
+        data = {**data, "questions": mine["questions"],
+                "thresholds": mine.get("thresholds", data["thresholds"])}
+    results = [run_eval(n, data, live=bool(args.live)) for n in names]
     thresholds = data["thresholds"]
     table = markdown(results, thresholds)
     print(table)

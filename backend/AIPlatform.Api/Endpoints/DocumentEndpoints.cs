@@ -15,7 +15,7 @@ public static class DocumentEndpoints
             async (HttpRequest r, IHttpClientFactory f) =>
                 await AiProxy.Post(r, f, "/documents"));
 
-        group.MapPost("/upload", Upload);
+        group.MapPost("/upload", (HttpRequest r, IHttpClientFactory f) => ForwardUpload(r, f, "/documents/upload"));
 
         group.MapGet("",
             async (IHttpClientFactory f) => await AiProxy.Get(f, "/documents"));
@@ -42,7 +42,8 @@ public static class DocumentEndpoints
     }
 
     // Chuyển nguyên multipart sang ai-service, không parse ở gateway.
-    private static async Task<IResult> Upload(HttpRequest r, IHttpClientFactory f)
+    // Dùng chung cho tải tài liệu (/documents/upload) và đính kèm file trong chat (/chat/attachments).
+    public static async Task<IResult> ForwardUpload(HttpRequest r, IHttpClientFactory f, string aiPath)
     {
         if (!r.HasFormContentType || string.IsNullOrEmpty(r.ContentType))
         {
@@ -71,7 +72,7 @@ public static class DocumentEndpoints
         using var content = new StreamContent(buffer);
         content.Headers.ContentType = MediaTypeHeaderValue.Parse(r.ContentType);
 
-        return await AiProxy.Relay(await f.AiClient().PostAsync("/documents/upload", content));
+        return await AiProxy.Relay(await f.AiClient().PostAsync(aiPath, content));
     }
 
     private static async Task<IResult> Download(

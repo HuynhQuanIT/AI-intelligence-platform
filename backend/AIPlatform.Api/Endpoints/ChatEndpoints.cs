@@ -20,6 +20,10 @@ public static class ChatEndpoints
             })
             .Accepts<ChatRequest>("application/json");
 
+        // File đính kèm trong khung chat: chuyển nguyên multipart; ai-service lưu riêng tư và đọc xong mới trả về.
+        app.MapPost("/api/platform/chat/attachments",
+            (HttpRequest r, IHttpClientFactory f) => DocumentEndpoints.ForwardUpload(r, f, "/chat/attachments"));
+
         app.MapPost("/api/platform/chat/stream", StreamChat)
             .Accepts<ChatRequest>("application/json");
 

@@ -132,3 +132,12 @@ button.danger:disabled{opacity:.5;cursor:not-allowed}
 .theme-option span { flex: 1; text-align: left; }
 .theme-option { margin: 0; color: inherit; font-size: 13px; }
 .theme-option small { font-size: 11px; }
+
+/* Đính kèm file trong chat */
+.attach-btn { padding: 8px; }
+.attach-bar { display: flex; align-items: center; gap: 10px; padding: 6px 12px 0; }
+.attach-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--c-4cc9b0);
+  border-radius: 99px; background: var(--c-rgba-76-201-176-p08); color: inherit; font-size: 12px; }
+.attach-chip button { display: inline-flex; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+button.attach-chip.sent { margin-bottom: 6px; cursor: pointer; }
+.chip.private { background: var(--c-2b2442); color: var(--c-cdb8ff); }

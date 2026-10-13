@@ -24,6 +24,7 @@ SMALLTALK = {
     "cam on", "thanks", "thank you",
 }
 MAX_CONTEXT_CHARS = 6000
+MAX_ATTACHMENT_CHARS = 24000  # file người dùng đính kèm được đưa vào prompt nhiều hơn các đoạn truy xuất thường
 MAX_TOOL_ROUNDS = int(os.getenv("AGENT_MAX_TOOL_ROUNDS", "4"))
 TOOL_TIMEOUT_SECONDS = 15
 MAX_TOOL_RESULT_CHARS = 6000
@@ -59,6 +60,7 @@ class State(TypedDict):
     security_matches: list
     stream: bool
     viewer: dict
+    attachment: dict | None
 
 
 def step(name: str, status: str, detail: str) -> dict:
@@ -78,7 +80,8 @@ def build():
     async def supervisor(s):
         enabled = await asyncio.to_thread(load_enabled)
         norm = normalize_text(s["message"])
-        route = "knowledge" if s["use_rag"] and norm not in SMALLTALK else "direct"
+        wants_context = s["use_rag"] or bool(s.get("attachment"))
+        route = "knowledge" if wants_context and norm not in SMALLTALK else "direct"
         return {
             "enabled": enabled,
             "route": route,
@@ -116,13 +119,28 @@ def build():
         if "knowledge" not in s["enabled"]:
             return {"context": [], "trace": s["trace"] + [step("knowledge", "skipped", "Knowledge Agent is disabled")]}
 
-        docs, info = await asyncio.to_thread(retrieve_ex, s["message"], 4, s.get("viewer"))
+        attached = s.get("attachment")
+        # File đính kèm đứng đầu ngữ cảnh: "tóm tắt file này" không có từ khóa nào để truy xuất, nên đọc thẳng file.
+        head = [
+            {"title": attached["title"], "content": c["content"], "document_id": attached["document_id"],
+             "chunk_index": c["chunk_index"], "similarity": None, "score": 1.0, "attached": True}
+            for c in (attached["chunks"] if attached else [])
+        ]
+        if not s["use_rag"]:
+            docs, info = [], {"mode": "off", "reason": ""}
+        else:
+            docs, info = await asyncio.to_thread(retrieve_ex, s["message"], 4, s.get("viewer"))
+            if attached:  # đoạn của chính file đính kèm đã có ở trên
+                docs = [d for d in docs if d.get("document_id") != attached["document_id"]]
         how = info["mode"] + (": " + info["reason"] if info["reason"] else "")
         # Quay về từ khóa vì LỖI (không phải vì cấu hình) thì đánh dấu để dễ thấy.
         status = "degraded" if info["reason"].startswith("vector search failed") else "completed"
+        detail = f"{len(docs)} chunks retrieved ({how})"
+        if attached:
+            detail = f"attached file '{attached['title']}': {len(head)}/{attached['total_chunks']} chunks; " + detail
         return {
-            "context": docs,
-            "trace": s["trace"] + [step("knowledge", status, f"{len(docs)} chunks retrieved ({how})")],
+            "context": head + docs,
+            "trace": s["trace"] + [step("knowledge", status, detail)],
         }
 
     async def analysis(s):
@@ -131,6 +149,7 @@ def build():
 
         scan_context = "security" in s["enabled"]
         kept, dropped, seen, total = [], [], set(), 0
+        budget = MAX_CONTEXT_CHARS + (MAX_ATTACHMENT_CHARS if s.get("attachment") else 0)
 
         for d in s["context"]:
             key = (d.get("document_id"), d.get("chunk_index"))
@@ -143,7 +162,7 @@ def build():
                 dropped.append(f'{d["title"]}: ' + ", ".join(hits))
                 continue
 
-            if total + len(d["content"]) > MAX_CONTEXT_CHARS:
+            if total + len(d["content"]) > budget:
                 break
             kept.append(d)
             total += len(d["content"])
@@ -169,7 +188,16 @@ def build():
             for h in history
         )
 
+        attached = s.get("attachment")
+        note = ""
+        if attached:
+            part = "" if len(attached["chunks"]) >= attached["total_chunks"] else (
+                f" Only the first {len(attached['chunks'])} of {attached['total_chunks']} parts are shown; "
+                "use the document tools to read the rest if the question needs it.")
+            note = (f"The user attached the file '{attached['title']}'. Its content is in the context below "
+                    f"(Source: {attached['title']}). Base your analysis on it.{part}\n")
         return (
+            note +
             "Answer clearly in the user's language.\n"
             "Use the conversation history to understand follow-up questions.\n"
             "Use the retrieved context when it is relevant; "

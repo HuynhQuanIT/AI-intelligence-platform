@@ -1,6 +1,7 @@
 """Nghiệp vụ chat dùng chung cho /chat và /chat/stream."""
 import asyncio
 import logging
+import uuid
 
 from ..rag.access import PUBLIC_ONLY
 from ..schemas import Chat
@@ -10,8 +11,39 @@ from .telemetry import estimate_cost, safe_log, safe_security_event
 logger = logging.getLogger(__name__)
 
 
-def initial_state(b: Chat, history: list, stream: bool = False, viewer: dict | None = None) -> dict:
+MAX_ATTACHMENT_CHARS = 24000  # phần nội dung file đưa thẳng vào prompt; file dài hơn thì model dùng công cụ đọc tiếp
+
+
+class AttachmentError(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status, self.message = status, message
+
+
+def load_attachment(attachment_id: str | None, viewer: dict) -> dict | None:
+    """Nội dung file đính kèm cho lượt chat này. Chỉ nhận tài liệu người xem được phép xem và đã xử lý xong;
+    id lạ/không có quyền đều báo như nhau (không lộ sự tồn tại của tài liệu người khác)."""
+    if not attachment_id:
+        return None
+    from ..rag.documents import attachment_chunks, get_document
+    try:
+        did = str(uuid.UUID(attachment_id))
+    except ValueError:
+        raise AttachmentError(404, "Không tìm thấy file đính kèm.")
+    doc = get_document(did, viewer)
+    if doc is None:
+        raise AttachmentError(404, "Không tìm thấy file đính kèm.")
+    if doc["status"] != "processed":
+        raise AttachmentError(409, "File đính kèm chưa xử lý xong hoặc bị lỗi.")
+    chunks, total = attachment_chunks(did, MAX_ATTACHMENT_CHARS)
+    return {"document_id": did, "title": doc["title"], "filename": doc["filename"],
+            "chunks": chunks, "total_chunks": total}
+
+
+def initial_state(b: Chat, history: list, stream: bool = False, viewer: dict | None = None,
+                  attachment: dict | None = None) -> dict:
     return {
+        "attachment": attachment,
         "message": b.message,
         "use_rag": b.use_rag,
         "model": b.model,
@@ -32,7 +64,7 @@ def initial_state(b: Chat, history: list, stream: bool = False, viewer: dict | N
     }
 
 
-async def prepare_conversation(b: Chat, user_id: str):
+async def prepare_conversation(b: Chat, user_id: str, attachment: dict | None = None):
     """Trả (conversation_id | None, history). Có conversation_id thì lấy lịch sử từ DB
     rồi lưu ngay tin nhắn người dùng (không mất nếu model lỗi).
     Ném conversations.ConversationNotFound nếu hội thoại không tồn tại hoặc không phải của user_id."""
@@ -46,7 +78,9 @@ async def prepare_conversation(b: Chat, user_id: str):
     if b.regenerate:
         await asyncio.to_thread(conversations.drop_last_exchange, cid, b.message)
     history = await asyncio.to_thread(conversations.recent_history, cid)
-    await asyncio.to_thread(conversations.add_message, cid, "user", b.message)
+    meta = {"attachment": {"document_id": attachment["document_id"], "title": attachment["title"],
+                           "filename": attachment["filename"]}} if attachment else None
+    await asyncio.to_thread(conversations.add_message, cid, "user", b.message, meta)
     return cid, history
 
 

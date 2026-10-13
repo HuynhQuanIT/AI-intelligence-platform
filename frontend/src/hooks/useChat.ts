@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, apiFetch, errorMessageOf } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { readSse } from '../api/sse';
-import type { ChatMessage, Conversation, LiveStep } from '../types';
+import type { AttachmentRef, ChatMessage, Conversation, LiveStep } from '../types';
 
 type Options = { refresh: () => Promise<void>; setErr: (message: string) => void };
 
@@ -16,6 +16,8 @@ export function useChat({ refresh, setErr }: Options) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [liveStep, setLiveStep] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  const [attachment, setAttachment] = useState<AttachmentRef | null>(null);
+  const [attaching, setAttaching] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const { refreshUser } = useAuth(); // nạp lại hạn mức còn lại sau mỗi lượt chat
 
@@ -45,6 +47,7 @@ export function useChat({ refresh, setErr }: Options) {
       setChat(rows.map((m: any) => ({
         role: m.role, text: m.text, meta: m.meta,
         id: m.role === 'ai' ? m.id : undefined, feedback: m.feedback ?? null,
+        attachment: m.role === 'user' ? m.meta?.attachment : undefined,
       })));
       setActiveId(id);
       setErr('');
@@ -116,6 +119,25 @@ export function useChat({ refresh, setErr }: Options) {
     }
   }
 
+  // Đính kèm file: server lưu thành tài liệu riêng tư và đọc xong mới trả về; sau đó mới gửi câu hỏi được.
+  async function attachFile(file: File) {
+    if (sending || attaching) return;
+    setErr('');
+    setAttaching(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const result = await api('/chat/attachments', { method: 'POST', body: form });
+      setAttachment({ document_id: result.id, title: result.title, filename: result.filename });
+      void refresh();
+    } catch (error: any) {
+      setAttachment(null);
+      setErr('Không đính kèm được file: ' + error.message);
+    } finally {
+      setAttaching(false);
+    }
+  }
+
   function stop() {
     abortRef.current?.abort();
   }
@@ -127,17 +149,19 @@ export function useChat({ refresh, setErr }: Options) {
     const asked = chat[chat.length - 2];
     if (last.role !== 'ai' || asked.role !== 'user') return;
     setChat((cur) => cur.slice(0, -2));
-    void send(asked.text, true);
+    void send(asked.text, true, asked.attachment);
   }
 
-  async function send(override?: string, regenerating = false) {
-    const message = (override ?? q).trim();
+  async function send(override?: string, regenerating = false, reuse?: AttachmentRef) {
+    const att = regenerating ? reuse ?? null : attachment;
+    const message = (override ?? q).trim() || (att && !regenerating ? 'Hãy tóm tắt và phân tích nội dung file này.' : '');
 
-    if (!message || sending) {
+    if (!message || sending || attaching) {
       return;
     }
 
     if (override === undefined) setQ('');
+    if (!regenerating) setAttachment(null);
     setErr('');
     const controller = new AbortController();
     abortRef.current = controller;
@@ -155,7 +179,7 @@ export function useChat({ refresh, setErr }: Options) {
 
       setChat((current) => [
         ...current,
-        { role: 'user', text: message },
+        { role: 'user', text: message, attachment: att ?? undefined },
         { role: 'ai', text: '', streaming: true },
       ]);
 
@@ -167,6 +191,7 @@ export function useChat({ refresh, setErr }: Options) {
           use_rag: useRag,
           conversation_id: conversationId,
           regenerate: regenerating,
+          attachment_id: att?.document_id ?? null,
         }),
         signal: controller.signal,
       });
@@ -220,5 +245,6 @@ export function useChat({ refresh, setErr }: Options) {
   return {
     q, setQ, chat, useRag, setUseRag, sending, conversations, activeId, liveStep, messagesRef,
     openConversation, newConversation, removeConversation, renameConversation, send, stop, regenerate, rate,
+    attachment, setAttachment, attaching, attachFile,
   };
 }

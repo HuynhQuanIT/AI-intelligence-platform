@@ -92,10 +92,16 @@ def _result(did, title, filename, chunks, vectors, size_bytes=None):
 
 
 def add_document(title, content):
+    # Dán trùng nội dung (bấm "Index" hai lần, request chậm...) không được tạo hai tài liệu giống nhau.
+    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    existing = query(
+        "SELECT id::text AS id, title FROM documents WHERE content_hash = %s AND owner_id IS NULL LIMIT 1", (digest,))
+    if existing:
+        raise DuplicateDocument(existing[0]["id"], existing[0]["title"])
     did = str(uuid.uuid4())
     chunks = split_text(content) or [content]
     vectors = _embed_chunks(title, chunks)
-    _insert_document(did, title, title, chunks, vectors)
+    _insert_document(did, title, title, chunks, vectors, {"content_hash": digest})
     return _result(did, title, title, chunks, vectors)
 
 
@@ -103,6 +109,14 @@ def ensure_schema() -> None:
     """Cột error cho tài liệu xử lý lỗi; và dọn các tài liệu kẹt 'processing' do lần chạy trước bị dừng."""
     with transaction() as cur:
         cur.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS error TEXT")
+        # Chủ sở hữu: tài liệu người dùng tải lên từ khung chat. Xóa user thì xóa luôn tài liệu riêng của họ
+        # (SET NULL sẽ vô tình biến chúng thành công khai).
+        cur.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES users(id) ON DELETE CASCADE")
+        cur.execute("DROP INDEX IF EXISTS documents_content_hash_idx")
+        cur.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS documents_hash_owner_idx ON documents("
+            "content_hash, COALESCE(owner_id, '00000000-0000-0000-0000-000000000000'::uuid)) "
+            "WHERE content_hash IS NOT NULL")
     fail_stale(STARTUP_GRACE_SECONDS)
 
 
@@ -124,13 +138,14 @@ def _display_name(filename: str) -> str:
     return filename.replace("\\", "/").split("/")[-1][:255] or "document"
 
 
-def start_upload(filename, title, data):
+def start_upload(filename, title, data, owner_id=None):
     """Bước NHANH (chạy trong request): kiểm tra trùng, lưu file gốc, tạo dòng status='processing'.
     Việc nặng (trích văn bản, chunk, embedding) làm ở process_document, chạy nền."""
     digest = hashlib.sha256(data).hexdigest()
+    # Trùng nội dung được xét trong cùng phạm vi chủ sở hữu: file riêng của A không làm B bị báo "đã tồn tại".
     existing = query(
-        "SELECT id::text AS id, title FROM documents WHERE content_hash = %s LIMIT 1",
-        (digest,),
+        "SELECT id::text AS id, title FROM documents WHERE content_hash = %s AND owner_id IS NOT DISTINCT FROM %s LIMIT 1",
+        (digest, owner_id),
     )
     if existing:
         raise DuplicateDocument(existing[0]["id"], existing[0]["title"])
@@ -146,9 +161,9 @@ def start_upload(filename, title, data):
     try:
         with transaction() as cur:
             cur.execute(
-                "INSERT INTO documents(id,title,filename,object_key,content_type,size_bytes,content_hash,status) "
-                "VALUES(%s,%s,%s,%s,%s,%s,%s,'processing')",
-                (did, title, display_name, key, CONTENT_TYPES[ext], len(data), digest),
+                "INSERT INTO documents(id,title,filename,object_key,content_type,size_bytes,content_hash,status,owner_id) "
+                "VALUES(%s,%s,%s,%s,%s,%s,%s,'processing',%s)",
+                (did, title, display_name, key, CONTENT_TYPES[ext], len(data), digest, owner_id),
             )
     except Exception:
         storage.remove_object(key)
@@ -213,6 +228,8 @@ def documents(viewer=PUBLIC_ONLY):
             d.created_at,
             d.size_bytes,
             d.error,
+            d.owner_id::text AS owner_id,
+            (SELECT u.email FROM users u WHERE u.id = d.owner_id) AS owner_email,
             (d.object_key IS NOT NULL) AS has_file
         FROM documents d
         WHERE """ + cond + """
@@ -220,6 +237,30 @@ def documents(viewer=PUBLIC_ONLY):
         """,
         params,
     )
+
+def owner_of(document_id):
+    """owner_id (str) của tài liệu, None nếu không có chủ hoặc không tồn tại."""
+    rows = query("SELECT owner_id::text AS owner_id FROM documents WHERE id = %s", (document_id,))
+    return rows[0]["owner_id"] if rows else None
+
+
+def user_document_count(user_id):
+    return query("SELECT COUNT(*)::int AS n FROM documents WHERE owner_id = %s", (user_id,))[0]["n"]
+
+
+def attachment_chunks(document_id, limit_chars):
+    """Các đoạn đầu của tài liệu theo thứ tự, tổng tối đa limit_chars. Trả (đoạn, tổng số đoạn)."""
+    rows = query(
+        "SELECT chunk_index, content FROM document_chunks WHERE document_id = %s ORDER BY chunk_index",
+        (document_id,))
+    kept, total = [], 0
+    for r in rows:
+        if kept and total + len(r["content"]) > limit_chars:
+            break
+        kept.append({"chunk_index": r["chunk_index"], "content": r["content"]})
+        total += len(r["content"])
+    return kept, len(rows)
+
 
 def delete_document(document_id):
     """Xóa dòng DB (chunk xóa theo cascade) rồi xóa file gốc. False nếu không tồn tại."""

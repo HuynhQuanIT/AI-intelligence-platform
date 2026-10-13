@@ -200,7 +200,8 @@ def mark_documents_for(user: dict, rows: list[dict]) -> list[dict]:
     out = []
     for r in rows:
         all_groups = by_doc.get(r["id"], [])
-        out.append({**r, "scope": "group" if all_groups else "public",
+        scope = "group" if all_groups else ("private" if r.get("owner_id") else "public")
+        out.append({**r, "scope": scope, "mine": r.get("owner_id") == str(user["id"]),
                     "groups": [g for g in all_groups if g["id"] in mine]})
     return out
 
@@ -248,6 +249,8 @@ def label_sources(viewer: dict | None, sources: list) -> list:
     if not ids:
         return sources
     by_doc = groups_of_documents(ids)
+    owned = {r["id"] for r in query(
+        "SELECT id::text AS id FROM documents WHERE id = ANY(%s::uuid[]) AND owner_id IS NOT NULL", (ids,))}
     viewer = viewer or {}
     if viewer.get("admin"):
         mine = None  # None = không lọc
@@ -259,5 +262,6 @@ def label_sources(viewer: dict | None, sources: list) -> list:
     for x in sources:
         found = by_doc.get(x.get("document_id"), [])
         shown = found if mine is None else [g for g in found if g["id"] in mine]
-        out.append({**x, "scope": "group" if found else "public", "groups": shown})
+        scope = "group" if found else ("private" if x.get("document_id") in owned else "public")
+        out.append({**x, "scope": scope, "groups": shown})
     return out

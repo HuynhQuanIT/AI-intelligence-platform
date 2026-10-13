@@ -4,6 +4,7 @@ import logging
 import uuid
 from urllib.parse import quote
 
+from psycopg.errors import UniqueViolation
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Response, UploadFile
 
 from ..agents.security import scan_text
@@ -16,6 +17,7 @@ from ..rag.documents import (
     add_document,
     delete_document,
     documents,
+    owner_of,
     fail_stale,
     get_document,
     get_document_file,
@@ -37,10 +39,18 @@ admin_only = [Depends(require_admin)]
 
 @router.post("/documents", dependencies=admin_only)
 def create_doc(b: Doc):
-    return add_document(
-        title=b.title,
-        content=b.content,
-    )
+    try:
+        return add_document(
+            title=b.title,
+            content=b.content,
+        )
+    except DuplicateDocument as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Nội dung này đã được index (tài liệu '{exc.title}').",
+        )
+    except UniqueViolation:  # hai request cùng nội dung đến sát nhau: request sau thua ở chỉ mục duy nhất
+        raise HTTPException(status_code=409, detail="Nội dung này vừa được index bởi một yêu cầu khác.")
 
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -86,9 +96,19 @@ async def upload_document(
     return result
 
 
-@router.post("/documents/{document_id}/retry", dependencies=admin_only, status_code=202)
-def retry_doc(document_id: str, background: BackgroundTasks):
+def require_admin_or_owner(document_id: str, user: dict) -> None:
+    """Admin sửa được mọi tài liệu; người dùng thường chỉ xóa/thử lại tài liệu riêng của mình.
+    Không phải chủ thì luôn 403, dù tài liệu có tồn tại hay không (không lộ sự tồn tại)."""
+    if user["role"] == "admin":
+        return
+    if owner_of(document_id) != str(user["id"]):
+        raise HTTPException(status_code=403, detail="Chỉ quản trị viên (hoặc chủ sở hữu) mới thực hiện được thao tác này.")
+
+
+@router.post("/documents/{document_id}/retry", status_code=202)
+def retry_doc(document_id: str, background: BackgroundTasks, user: dict = Depends(current_user)):
     document_id = valid_document_id(document_id)
+    require_admin_or_owner(document_id, user)
     if not retry_document(document_id):
         raise HTTPException(status_code=409, detail="Chỉ thử lại được tài liệu đang ở trạng thái failed.")
     background.add_task(process_document, document_id)
@@ -106,7 +126,8 @@ def get_docs(user: dict = Depends(current_user)):
         rows = [{**r, "groups": by_doc.get(r["id"], [])} for r in rows]
     else:
         # Người dùng thường chỉ thấy nhãn: Công khai, hoặc tên các nhóm CỦA MÌNH chứa tài liệu.
-        rows = groups.mark_documents_for(user, rows)
+        # Email chủ sở hữu chỉ dành cho admin (file riêng được chia sẻ qua nhóm không được lộ người tải lên).
+        rows = groups.mark_documents_for(user, [{k: v for k, v in r.items() if k != "owner_email"} for r in rows])
     return rows
 
 
@@ -137,9 +158,10 @@ def get_doc_detail(document_id: str, user: dict = Depends(current_user)):
 
     return document
 
-@router.delete("/documents/{document_id}", dependencies=admin_only)
-def delete_doc(document_id: str):
+@router.delete("/documents/{document_id}")
+def delete_doc(document_id: str, user: dict = Depends(current_user)):
     document_id = valid_document_id(document_id)
+    require_admin_or_owner(document_id, user)
     if not delete_document(document_id):
         raise HTTPException(status_code=404, detail="Document not found")
     return {"deleted": document_id}

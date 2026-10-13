@@ -2,7 +2,8 @@
 
 Quy tắc duy nhất, dùng chung cho danh sách, xem, tải file, tìm kiếm RAG và công cụ của agent:
   - tài liệu KHÔNG thuộc nhóm nào: mọi người đã đăng nhập đều thấy;
-  - tài liệu thuộc >= 1 nhóm: chỉ thành viên của một trong các nhóm đó (và admin) thấy.
+  - tài liệu thuộc >= 1 nhóm: chỉ thành viên của một trong các nhóm đó (và admin) thấy;
+  - tài liệu có chủ (owner_id, tải lên từ khung chat): riêng tư, chỉ chủ và admin thấy cho tới khi admin gán nhóm.
 Người xem là dict nhỏ (JSON được, đi qua state của LangGraph). Mặc định an toàn nhất: PUBLIC_ONLY.
 """
 
@@ -27,14 +28,20 @@ def visible_sql(viewer: dict | None, alias: str = "d") -> tuple[str, tuple]:
     if viewer.get("admin"):
         return "TRUE", ()
 
-    done = f"{alias}.status = 'processed'"  # tài liệu đang xử lý/lỗi chỉ admin thấy
+    done = f"{alias}.status = 'processed'"  # tài liệu đang xử lý/lỗi chỉ admin (và chủ sở hữu) thấy
     no_group = f"NOT EXISTS (SELECT 1 FROM document_groups dg WHERE dg.document_id = {alias}.id)"
+    # Tài liệu có chủ (người dùng tải lên từ khung chat) mặc định RIÊNG TƯ: không tính là "công khai".
+    open_to_all = f"({alias}.owner_id IS NULL AND {no_group})"
     user_id = viewer.get("user_id")
     if not user_id:
-        return f"({done} AND {no_group})", ()
+        return f"({done} AND {open_to_all})", ()
 
     member = (
         "EXISTS (SELECT 1 FROM document_groups dg JOIN user_groups ug ON ug.group_id = dg.group_id "
         f"WHERE dg.document_id = {alias}.id AND ug.user_id = %s)"
     )
-    return f"({done} AND ({no_group} OR {member}))", (user_id,)
+    # Chủ sở hữu luôn thấy tài liệu của mình (kể cả đang xử lý/lỗi); người khác chỉ thấy khi nó thuộc nhóm của họ.
+    return (
+        f"({alias}.owner_id = %s OR ({done} AND ({open_to_all} OR {member})))",
+        (user_id, user_id),
+    )

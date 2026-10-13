@@ -1,0 +1,9 @@
+{
+ "description": "Mẫu bộ câu hỏi THẬT. Sao chép thành my_questions.json rồi sửa. doc = title đúng của tài liệu trong Knowledge Center; fact = cụm chữ NGUYÊN VĂN trong tài liệu mà câu trả lời đúng phải dựa vào; tier: lexical (hỏi gần từ trong tài liệu), semantic (hỏi diễn đạt khác hẳn), negative (câu ngoài phạm vi, doc/fact để null).",
+ "thresholds": {"lexical": {"hit@4": 0.8, "fact_recall": 0.7}, "semantic": {"hit@4": 0.7}, "negative": {"rejection": 0.8}},
+ "questions": [
+  {"q": "Nhân viên được nghỉ phép năm bao nhiêu ngày?", "doc": "TÊN TÀI LIỆU CỦA BẠN", "fact": "cụm chữ nguyên văn trong tài liệu", "tier": "lexical"},
+  {"q": "Một năm tôi được vắng mặt có lương mấy hôm?", "doc": "TÊN TÀI LIỆU CỦA BẠN", "fact": "cụm chữ nguyên văn trong tài liệu", "tier": "semantic"},
+  {"q": "Dự báo thời tiết ngày mai ra sao?", "doc": null, "fact": null, "tier": "negative"}
+ ]
+}

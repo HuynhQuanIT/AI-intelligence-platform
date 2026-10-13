@@ -392,3 +392,66 @@ test('giao diện Sáng / Tối / Theo hệ thống: đổi ngay, nhớ sau khi 
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect.poll(theme).toBe('dark');
 });
+
+test('đính kèm file trong chat: lưu riêng tư vào Knowledge Center, chatbot dùng file làm nguồn, xóa được', async ({ browser }) => {
+  const { page } = await newSession(browser);
+  await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await openPage(page, 'AI Playground');
+
+  const stamp = Date.now().toString(36);
+  const name = `bao-cao-${stamp}.txt`;
+  await page.getByLabel('Chọn file đính kèm').setInputFiles({
+    name, mimeType: 'text/plain',
+    buffer: Buffer.from(`Báo cáo nội bộ ${stamp}. Doanh thu quý ba đạt 420 triệu, tăng 12% so với quý hai. `.repeat(8)),
+  });
+  const chip = page.locator('.attach-bar .attach-chip');
+  await expect(chip).toContainText(name, { timeout: 30000 });
+
+  await page.getByRole('button', { name: 'Gửi', exact: true }).click(); // không gõ gì: dùng câu mặc định "tóm tắt"
+  await expect(page.locator('.bubble.user .attach-chip.sent')).toContainText(name);
+  const answer = page.locator('.bubble.ai').last();
+  await expect(answer.locator('.chip.private')).toBeVisible({ timeout: 30000 }); // nguồn là file riêng tư
+  await expect(page.locator('.attach-bar')).toHaveCount(0); // chip đã được dọn sau khi gửi
+
+  // Mở lại hội thoại: chip file vẫn hiện trên câu hỏi.
+  await page.reload();
+  await openPage(page, 'AI Playground');
+  await page.locator('.conv-item', { hasText: 'Hãy tóm tắt' }).getByRole('button').first().click();
+  await expect(page.locator('.bubble.user .attach-chip.sent').last()).toContainText(name);
+
+  // File nằm trong Knowledge Center, đánh dấu riêng tư, xóa được.
+  await openPage(page, 'Knowledge Center');
+  const row = page.locator('.row', { hasText: name });
+  await expect(row.locator('.chip.private')).toBeVisible();
+  page.once('dialog', (d) => d.accept());
+  await row.getByRole('button', { name: 'Xóa' }).click();
+  await expect(page.locator('.row', { hasText: name })).toHaveCount(0);
+});
+
+test('thêm tài liệu khi server chậm: nút bị khóa, bấm lại không tạo bản trùng, xóa xong không hiện lại', async ({ browser }) => {
+  const { page } = await newSession(browser);
+  await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await openPage(page, 'Knowledge Center');
+
+  // Làm chậm yêu cầu tạo tài liệu (như lúc Gemini tạo embedding lâu).
+  await page.route('**/documents', async (route) => {
+    if (route.request().method() === 'POST') await new Promise((r) => setTimeout(r, 2500));
+    await route.continue();
+  });
+  const title = 'Tài liệu chậm ' + Date.now().toString(36);
+  await page.getByPlaceholder('Product handbook').fill(title);
+  await page.getByPlaceholder('Paste document text...').fill('Nội dung để thử bấm hai lần khi server chậm. '.repeat(3));
+  const add = page.getByRole('button', { name: /Index document|Đang index/ });
+  await add.click();
+  await expect(add).toBeDisabled(); // không bấm thêm lần nữa được
+  await expect(page.locator('.row', { hasText: title })).toHaveCount(1, { timeout: 20000 });
+  await page.unroute('**/documents');
+
+  page.once('dialog', (d) => d.accept());
+  await page.locator('.row', { hasText: title }).getByRole('button', { name: 'Xóa' }).click();
+  await expect(page.locator('.row', { hasText: title })).toHaveCount(0);
+  await page.waitForTimeout(3500); // chờ: nếu còn request treo thì bản trùng sẽ hiện lại ở đây
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await page.waitForTimeout(1000);
+  await expect(page.locator('.row', { hasText: title })).toHaveCount(0);
+});
