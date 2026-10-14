@@ -26,6 +26,10 @@ public sealed class ChatRequest
     // Sinh lại câu trả lời cuối của hội thoại: ai-service xóa lượt hỏi-đáp cuối rồi trả lời lại.
     [JsonPropertyName("regenerate")]
     public bool Regenerate { get; set; }
+
+    // Id tài liệu (đã xử lý) mà người dùng vừa đính kèm trong khung chat.
+    [JsonPropertyName("attachment_id")]
+    public string? AttachmentId { get; set; }
 }
 
 public sealed class HistoryItem

@@ -11,7 +11,7 @@ const PASSWORD = 'Mat-khau-e2e-123';
 const NEW_PASSWORD = 'Mat-khau-moi-456';
 const email = uniqueEmail('nguoidung');
 const groupName = 'Nhóm E2E ' + Date.now().toString(36);
-const docTitle = 'Tài liệu mật ' + Date.now().toString(36);
+const docTitle = 'Tài liệu mật ' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 test('đăng ký, chờ duyệt, admin duyệt, người dùng thường chỉ thấy trang của mình', async ({ browser }) => {
   const { page: guest } = await newSession(browser);
@@ -101,7 +101,7 @@ test('nhóm và phân quyền tài liệu: người ngoài nhóm không thấy, 
 
   await openPage(admin, 'Knowledge Center');
   await admin.getByPlaceholder('Product handbook').fill(docTitle);
-  await admin.getByPlaceholder('Paste document text...').fill('Nội dung nội bộ chỉ dành cho nhóm được cấp quyền.');
+  await admin.getByPlaceholder('Paste document text...').fill(`Nội dung nội bộ chỉ dành cho nhóm được cấp quyền. Mã ${docTitle}.`);
   await admin.getByRole('button', { name: 'Index document' }).click();
   await expect(admin.getByText(docTitle, { exact: true })).toBeVisible();
 
