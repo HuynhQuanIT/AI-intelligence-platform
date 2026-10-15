@@ -113,6 +113,7 @@ button.danger:disabled{opacity:.5;cursor:not-allowed}
 .icon-btn:hover { background: var(--c-rgba-127-150-180-0p15); color: var(--c-cbd7e6); }
 .icon-btn.on { border-color: var(--c-2f8f6a); color: var(--c-4fd1a1); background: var(--c-rgba-79-209-161-0p1); }
 .icon-btn.down.on { border-color: var(--c-b4505a); color: var(--c-ff8d98); background: var(--c-rgba-255-141-152-0p1); }
+.no-source-note { display: block; margin-top: 8px; padding: 6px 10px; border-left: 3px solid var(--c-e0b050); color: var(--c-e0b050); }
 .stopped-note { display: block; margin-top: 6px; color: var(--c-e0b050); font-style: italic; }
 .stop-btn { display: inline-flex; align-items: center; gap: 6px; }
 .fb-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }
@@ -141,3 +142,20 @@ button.danger:disabled{opacity:.5;cursor:not-allowed}
 .attach-chip button { display: inline-flex; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
 button.attach-chip.sent { margin-bottom: 6px; cursor: pointer; }
 .chip.private { background: var(--c-2b2442); color: var(--c-cdb8ff); }
+
+/* Trang RAG Evaluation */
+.rq-row { display: grid; grid-template-columns: 2fr 1.2fr 1.4fr 2fr auto; gap: 8px; margin-bottom: 8px; align-items: center; }
+.rq-row input, .rq-row select { margin: 0; min-width: 0; }
+.rq-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.rq-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.rq-compare { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 0 auto; font-size: 13px; color: inherit; }
+.rq-compare input { width: auto; margin: 0; }
+.rq-import { display: grid; gap: 8px; margin-top: 10px; }
+.rq-scroll { overflow-x: auto; margin: 10px 0; }
+.rq-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rq-table th, .rq-table td { padding: 6px 10px; text-align: left; border-top: 1px solid var(--c-rgba-127-150-180-0p2); }
+.rq-ok { color: var(--c-4fd1a1); font-weight: 600; }
+.rq-bad { color: var(--c-ff8d98); font-weight: 600; }
+.rq-wrong { margin-top: 14px; }
+.rq-wrong p { margin: 6px 0; }
+@media (max-width: 900px) { .rq-row { grid-template-columns: 1fr; } .rq-compare { margin-left: 0; } }

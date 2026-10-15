@@ -13,6 +13,19 @@ class Eval(BaseModel):
     expected: str = ""
 
 
+class RagQuestion(BaseModel):
+    q: str = Field(min_length=1, max_length=500)
+    tier: str = Field(pattern="^(lexical|semantic|negative)$")
+    doc: str | None = Field(default=None, max_length=250)
+    fact: str | None = Field(default=None, max_length=500)
+
+
+class RagEval(BaseModel):
+    questions: list[RagQuestion] = Field(min_length=1, max_length=50)
+    # True: đo cả "off" và "heuristic" để so sánh; False: chỉ đo cấu hình reranker hiện tại.
+    compare: bool = False
+
+
 class HistoryItem(BaseModel):
     role: str          # "user" hoặc "ai"
     text: str = Field(max_length=12000)

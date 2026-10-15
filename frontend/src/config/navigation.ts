@@ -3,6 +3,7 @@ import {
   Bot,
   CircleDollarSign,
   Database,
+  FlaskConical,
   LayoutDashboard,
   MessageSquare,
   Search,
@@ -35,6 +36,7 @@ export const NAV_ITEMS: NavItem[] = [
   { name: 'User Management', icon: Users, group: 'ADMIN', roles: ['admin'] },
   { name: 'Groups', icon: UserCog, group: 'ADMIN', roles: ['admin'] },
   { name: 'Feedback', icon: ThumbsUp, group: 'ADMIN', roles: ['admin'] },
+  { name: 'RAG Evaluation', icon: FlaskConical, group: 'ADMIN', roles: ['admin'] },
   { name: 'My Account', icon: UserCircle, group: 'ACCOUNT', roles: ALL },
 ];
 
@@ -59,5 +61,6 @@ export const PAGE_DESCRIPTIONS: Record<Page, string> = {
   'User Management': 'Approve accounts, manage roles, quotas and sign-in.',
   Groups: 'Group users and control who can read which documents.',
   Feedback: 'See how users rate the chatbot answers and which ones need fixing.',
+  'RAG Evaluation': 'Measure how well the chatbot finds the right document for your real questions.',
   'My Account': 'Your usage quota and password.',
 };

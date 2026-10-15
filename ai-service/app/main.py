@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api import (
     auth as auth_api, chat, conversations as conversations_api, documents, groups as groups_api,
-    feedback as feedback_api, health, monitoring, search as search_api, security,
+    feedback as feedback_api, health, monitoring, rag_eval as rag_eval_api, search as search_api, security,
 )
 from .core import settings
 from .core.db import init_pool
@@ -45,5 +45,5 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
-for module in (health, auth_api, chat, conversations_api, documents, groups_api, monitoring, security, search_api, feedback_api):
+for module in (health, auth_api, chat, conversations_api, documents, groups_api, monitoring, security, search_api, feedback_api, rag_eval_api):
     app.include_router(module.router)

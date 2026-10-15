@@ -440,7 +440,7 @@ test('thêm tài liệu khi server chậm: nút bị khóa, bấm lại không t
   });
   const title = 'Tài liệu chậm ' + Date.now().toString(36);
   await page.getByPlaceholder('Product handbook').fill(title);
-  await page.getByPlaceholder('Paste document text...').fill('Nội dung để thử bấm hai lần khi server chậm. '.repeat(3));
+  await page.getByPlaceholder('Paste document text...').fill('Nội dung để thử bấm hai lần khi server chậm. '.repeat(3) + title);
   const add = page.getByRole('button', { name: /Index document|Đang index/ });
   await add.click();
   await expect(add).toBeDisabled(); // không bấm thêm lần nữa được
@@ -454,4 +454,68 @@ test('thêm tài liệu khi server chậm: nút bị khóa, bấm lại không t
   await page.getByRole('button', { name: 'Refresh' }).click();
   await page.waitForTimeout(1000);
   await expect(page.locator('.row', { hasText: title })).toHaveCount(0);
+});
+
+test('RAG Evaluation: admin nhập câu hỏi thật, chạy đo và thấy kết quả', async ({ browser }) => {
+  const { page } = await newSession(browser);
+  await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+
+  const token = 'zq' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const title = 'Quy định đo ' + token;
+  await openPage(page, 'Knowledge Center');
+  await page.getByPlaceholder('Product handbook').fill(title);
+  await page.getByPlaceholder('Paste document text...').fill(`Mã số niêm phong ${token} được trưởng ca giữ và đổi mỗi tuần. ${title}`);
+  await page.getByRole('button', { name: 'Index document' }).click();
+  await expect(page.locator('.row', { hasText: title })).toBeVisible();
+
+  await openPage(page, 'RAG Evaluation');
+  await page.evaluate(() => localStorage.removeItem('aip-rag-eval-questions'));
+  await page.reload();
+  await openPage(page, 'RAG Evaluation');
+  await page.getByLabel('Câu hỏi 1').fill(`Mã số niêm phong ${token} do ai giữ?`);
+  await page.getByLabel('Tài liệu câu 1').selectOption({ label: title });
+  await page.getByLabel('Cụm chữ nguyên văn câu 1').fill('trưởng ca giữ');
+  await page.getByRole('button', { name: 'Thêm câu hỏi' }).click();
+  await page.getByLabel('Câu hỏi 2').fill('Dự báo thời tiết ngày mai ở Đà Lạt thế nào?');
+  await page.getByLabel('Loại câu 2').selectOption('negative');
+  await page.getByRole('button', { name: 'Chạy đo' }).click();
+
+  await expect(page.getByText('Đạt tất cả ngưỡng đề ra.')).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('.rq-table')).toContainText('lexical');
+  await expect(page.locator('.rq-table')).toContainText('negative');
+
+  // Bộ câu hỏi được nhớ sau khi tải lại trang.
+  await page.reload();
+  await openPage(page, 'RAG Evaluation');
+  await expect(page.getByLabel('Câu hỏi 2')).toHaveValue(/thời tiết/);
+
+  await openPage(page, 'Knowledge Center');
+  page.once('dialog', (d) => d.accept());
+  await page.locator('.row', { hasText: title }).getByRole('button', { name: 'Xóa' }).click();
+  await expect(page.locator('.row', { hasText: title })).toHaveCount(0);
+});
+
+test('chatbot: câu trả lời không có nguồn tài liệu được ghi chú rõ, tắt RAG thì không ghi chú', async ({ browser }) => {
+  const { page } = await newSession(browser);
+  await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await openPage(page, 'AI Playground');
+  const input = page.getByPlaceholder('Message your AI assistant...');
+  const send = page.getByRole('button', { name: 'Gửi', exact: true });
+
+  const nonsense = 'Zxqvbnm plokij wsxedc ' + Date.now().toString(36);
+  await input.fill(nonsense);
+  await send.click();
+  await expect(page.locator('.bubble.ai').last().locator('.no-source-note')).toBeVisible({ timeout: 30000 });
+
+  await page.getByLabel('Enable RAG').uncheck();
+  await input.fill(nonsense + ' khong rag');
+  await send.click();
+  await expect(page.locator('.bubble.ai')).toHaveCount(2, { timeout: 30000 });
+  await expect(page.locator('.bubble.ai').last().locator('.no-source-note')).toHaveCount(0);
+
+  // Mở lại hội thoại từ server: tin cũ vẫn giữ ghi chú.
+  await page.reload();
+  await openPage(page, 'AI Playground');
+  await page.locator('.conv-item', { hasText: 'Zxqvbnm' }).getByRole('button').first().click();
+  await expect(page.locator('.bubble.ai').first().locator('.no-source-note')).toBeVisible();
 });

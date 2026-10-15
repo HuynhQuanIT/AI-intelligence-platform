@@ -136,3 +136,13 @@ def test_upload_validation_and_duplicate(client):
 def test_agents_and_tools_tables_exist(client):
     agents = {a["id"] for a in client.get("/agents").json()}
     assert {"supervisor", "knowledge", "analyst", "security", "response", "tools"} <= agents
+
+def test_payload_reports_whether_rag_was_on(client):
+    """Giao diện cần biết RAG có bật không để ghi chú 'không dựa trên tài liệu' khi không có nguồn."""
+    from auth_helpers import make_user
+    _, h, _, c = make_user()
+    q = "Zxqvbnm plokij wsxedc rfvtgb yhnujm"  # không khớp tài liệu nào
+    on = c.post("/chat", headers=h, json={"message": q, "use_rag": True}).json()
+    off = c.post("/chat", headers=h, json={"message": q, "use_rag": False}).json()
+    assert on["rag"] is True and on["sources"] == []
+    assert off["rag"] is False

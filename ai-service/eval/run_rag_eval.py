@@ -21,6 +21,10 @@ DATA = Path(__file__).with_name("rag_eval_data.json")
 LIMIT = 4
 
 
+class EvalError(Exception):
+    """Bộ câu hỏi không hợp lệ (vd tên tài liệu không khớp); thông điệp hiển thị được cho người dùng."""
+
+
 def load():
     return json.loads(DATA.read_text(encoding="utf-8"))
 
@@ -45,7 +49,7 @@ def run_eval(reranker="heuristic", data=None, live=False):
                 "SELECT id::text AS id, title FROM documents WHERE status = 'processed'")}
             missing = sorted({q["doc"] for q in data["questions"] if q.get("doc") and q["doc"] not in by_title})
             if missing:
-                raise SystemExit("Không thấy tài liệu (tên phải khớp đúng title trong Knowledge Center): " + "; ".join(missing))
+                raise EvalError("Không thấy tài liệu (tên phải khớp đúng title trong Knowledge Center): " + "; ".join(missing))
             viewer = ADMIN
         else:
             for doc in data["documents"]:
@@ -61,7 +65,8 @@ def run_eval(reranker="heuristic", data=None, live=False):
             if tier == "semantic" and not use_semantic:
                 continue
             hits, info = retrieve_ex(item["q"], LIMIT, viewer, rerank=reranker)
-            row = {"q": item["q"], "tier": tier, "n": len(hits), "mode": info["mode"]}
+            row = {"q": item["q"], "tier": tier, "n": len(hits), "mode": info["mode"],
+                   "sim": info.get("top_similarity")}
             if tier == "negative":
                 row["rejected"] = len(hits) == 0
             else:
@@ -94,7 +99,13 @@ def run_eval(reranker="heuristic", data=None, live=False):
         }
     neg = [r for r in rows if r["tier"] == "negative"]
     metrics["negative"] = {"n": len(neg), "rejection": _round(sum(r["rejected"] for r in neg) / len(neg))} if neg else None
-    return {"reranker": reranker, "mode": rows[0]["mode"] if rows else "", "metrics": metrics, "rows": rows}
+    # Độ giống (cosine) của chunk giống nhất trước cổng MIN_TOP_SIMILARITY: câu đúng thấp nhất và câu ngoài phạm vi
+    # cao nhất. Nếu hai số tách nhau thì đặt ngưỡng vào giữa là đủ; nếu chồng lên nhau, ngưỡng đơn lẻ không đủ.
+    good = [r["sim"] for r in rows if r["tier"] != "negative" and r.get("rank") and r.get("sim") is not None]
+    bad = [r["sim"] for r in rows if r["tier"] == "negative" and r.get("sim") is not None]
+    similarity = {"min_relevant": min(good) if good else None, "max_irrelevant": max(bad) if bad else None}
+    return {"reranker": reranker, "mode": rows[0]["mode"] if rows else "", "metrics": metrics,
+            "similarity": similarity, "rows": rows}
 
 
 def check(result, thresholds):
@@ -158,7 +169,10 @@ def main(argv=None):
         mine = json.loads(Path(args.live).read_text(encoding="utf-8"))
         data = {**data, "questions": mine["questions"],
                 "thresholds": mine.get("thresholds", data["thresholds"])}
-    results = [run_eval(n, data, live=bool(args.live)) for n in names]
+    try:
+        results = [run_eval(n, data, live=bool(args.live)) for n in names]
+    except EvalError as e:
+        raise SystemExit(str(e))
     thresholds = data["thresholds"]
     table = markdown(results, thresholds)
     print(table)

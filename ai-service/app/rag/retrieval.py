@@ -6,7 +6,7 @@ from functools import lru_cache
 from ..core.db import query
 from .access import PUBLIC_ONLY, visible_sql
 from . import embeddings, rerank as reranker
-from .text import keywords, normalize_text, words
+from .text import accented_words, keywords, normalize_text, words
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +100,10 @@ LEXICAL_MIN_SCORE = float(os.getenv("LEXICAL_MIN_SCORE", "0.5"))
 # Khi vector không tìm thấy gì đủ giống, từ khóa phải khớp (gần) toàn bộ mới được tin một mình.
 # Tránh câu ngoài chủ đề lọt vào chỉ vì trùng vài từ chung như "cong thuc", "bo".
 LEXICAL_ALONE_MIN_SCORE = float(os.getenv("LEXICAL_ALONE_MIN_SCORE", "1.0"))
+# Từ khóa chỉ được "cứu" khi vector không hoàn toàn bác bỏ: chunk giống nhất phải đạt tối thiểu ngần này.
+# Dưới mức đó vector cho rằng không có gì liên quan, còn từ khóa chung như "thủ", "nước", "pháp" có thể trùng
+# ngẫu nhiên trong một tài liệu dài (đo thực tế: câu ngoài phạm vi 0.52-0.56, câu đúng thấp nhất 0.63).
+LEXICAL_RESCUE_MIN_SIMILARITY = float(os.getenv("LEXICAL_RESCUE_MIN_SIMILARITY", "0.55"))
 
 
 # Chế độ chỉ từ khóa (chưa bật embeddings): tỉ lệ từ khóa câu hỏi tối thiểu phải khớp.
@@ -166,6 +170,17 @@ def _describe_error(exc) -> str:
 POOL_FACTOR = 3  # lấy rộng limit*3 ứng viên rồi xếp hạng lại
 
 
+def _accents_agree(question, content):
+    """Chỉ dùng khi từ khóa là tín hiệu DUY NHẤT (vector không thấy gì giống). Bỏ dấu làm nhiều từ khác nghĩa thành một
+    ('thủ đô' ~ 'thu thập', 'pháp' ~ 'phấp'...) nên câu ngoài phạm vi vẫn khớp đủ từ khóa. Nếu câu hỏi có dấu thì
+    các từ khóa phải khớp cả dấu; câu gõ không dấu giữ nguyên cách khớp cũ."""
+    keys = keywords(question)
+    query_forms = {w for w in accented_words(question) if normalize_text(w) in keys}
+    if all(normalize_text(w) == w for w in query_forms):
+        return True  # không có dấu nào để đối chiếu
+    return query_forms <= accented_words(content)
+
+
 def retrieve_ex(question, limit=4, viewer=PUBLIC_ONLY, rerank=None):
     """
     Hybrid: từ khóa + vector, gộp bằng Reciprocal Rank Fusion có trọng số.
@@ -181,8 +196,11 @@ def retrieve_ex(question, limit=4, viewer=PUBLIC_ONLY, rerank=None):
         top, used = reranker.rerank(question, lexical, limit, rerank)
         return top, {"mode": "keyword", "reason": "embeddings disabled", "rerank": used}
 
+    top_similarity = None
     try:
-        semantic = near_top(retrieve_vector(question, limit * POOL_FACTOR, viewer))
+        raw = retrieve_vector(question, limit * POOL_FACTOR, viewer)
+        top_similarity = raw[0]["similarity"] if raw else None  # trước cổng: để hiệu chỉnh ngưỡng
+        semantic = near_top(raw)
     except Exception as exc:
         logger.exception("Vector search failed; falling back to lexical retrieval")
         top, used = reranker.rerank(question, lexical, limit, rerank)
@@ -194,6 +212,11 @@ def retrieve_ex(question, limit=4, viewer=PUBLIC_ONLY, rerank=None):
 
     lexical_min = LEXICAL_MIN_SCORE if semantic else max(LEXICAL_MIN_SCORE, LEXICAL_ALONE_MIN_SCORE)
     lexical = [item for item in lexical if item["score"] >= lexical_min]
+    if not semantic:
+        if top_similarity is not None and top_similarity < LEXICAL_RESCUE_MIN_SIMILARITY:
+            lexical = []
+        else:
+            lexical = [item for item in lexical if _accents_agree(question, item["content"])]
 
     fused = {}
     for ranking, weight in (
@@ -222,7 +245,7 @@ def retrieve_ex(question, limit=4, viewer=PUBLIC_ONLY, rerank=None):
         entry["score"] = round(entry["score"], 4)
     ranked, used = reranker.rerank(question, ranked[: limit * POOL_FACTOR], limit, rerank)
 
-    return ranked, {"mode": "hybrid", "reason": "", "rerank": used}
+    return ranked, {"mode": "hybrid", "reason": "", "rerank": used, "top_similarity": top_similarity}
 
 
 def retrieve(question, limit=4, viewer=PUBLIC_ONLY):

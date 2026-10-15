@@ -13,6 +13,7 @@ export type Page =
   | 'User Management'
   | 'Groups'
   | 'Feedback'
+  | 'RAG Evaluation'
   | 'My Account';
 
 export type Role = 'admin' | 'user';
@@ -137,6 +138,7 @@ export type ChatMessage = {
     cost_usd?: number;
     blocked?: boolean;
     sources?: SourceRef[];
+    rag?: boolean; // RAG bật khi hỏi câu này (tin cũ không có trường này)
   };
 };
 

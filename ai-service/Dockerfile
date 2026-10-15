@@ -9,5 +9,7 @@ RUN if [ "$INSTALL_OCR" = "true" ]; then \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
+# Bộ đo chất lượng RAG: dùng bởi trang "RAG Evaluation" của admin và lệnh python -m eval.run_rag_eval.
+COPY eval ./eval
 EXPOSE 8000
 CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000"]

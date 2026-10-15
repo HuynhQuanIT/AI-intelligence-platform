@@ -50,6 +50,12 @@ STOPWORDS = {
 }
 
 
+def accented_words(text: str) -> set[str]:
+    """Từ chữ thường GIỮ dấu (NFC): để phân biệt 'thủ' với 'thu' khi bỏ dấu làm hai từ trùng nhau."""
+    text = unicodedata.normalize("NFC", (text or "").lower())
+    return set(re.findall(r"\w+", text))
+
+
 def keywords(text: str) -> set[str]:
     """Từ khóa có nghĩa của câu hỏi; nếu toàn từ chức năng thì dùng lại tất cả."""
     all_words = words(text)

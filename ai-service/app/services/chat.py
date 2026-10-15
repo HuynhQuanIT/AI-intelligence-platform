@@ -136,6 +136,8 @@ async def finish_chat(request_id, provider, state, latency_ms, conversation_id, 
         "latency_ms": latency_ms,
         "blocked": state["blocked"],
         "sources": sources,
+        # Có bật RAG hay không: giao diện dùng để ghi chú "không dựa trên tài liệu" khi không có nguồn nào.
+        "rag": bool(state.get("use_rag")),
         "trace": state["trace"],
     }
 
@@ -148,6 +150,7 @@ async def finish_chat(request_id, provider, state, latency_ms, conversation_id, 
             "latency_ms": latency_ms,
             "blocked": payload["blocked"],
             "sources": source_summary(sources),
+            "rag": payload["rag"],
             "trace": state["trace"],
         }
         try:

@@ -185,6 +185,13 @@ export default function Playground({ refresh, setErr, onOpenDocument }: Props) {
 
               {message.role === 'ai' && <Sources sources={message.meta?.sources} onOpen={onOpenDocument} />}
 
+              {message.role === 'ai' && !message.streaming && !message.stopped && !!message.text && message.meta?.rag &&
+                !message.meta.blocked && !message.meta.sources?.length && (
+                <small className="no-source-note">
+                  Câu trả lời này không dựa trên tài liệu nào (không tìm thấy nội dung liên quan) mà theo kiến thức chung của AI.
+                </small>
+              )}
+
               {message.role === 'ai' && message.stopped && <small className="stopped-note">Đã dừng trả lời</small>}
 
               {message.role === 'ai' && !message.streaming && (
